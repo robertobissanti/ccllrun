@@ -4,6 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ccllrun Studio</title>
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [["\\(", "\\)"], ["$", "$"]],
+      displayMath: [["\\[", "\\]"], ["$$", "$$"]],
+      processEscapes: true,
+      processEnvironments: true
+    },
+    svg: { fontCache: "local" },
+    options: { skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code"] }
+  };
+</script>
+<script defer src="/vendor/mathjax/tex-svg.js"></script>
 <style>
   :root {
     --bg: #262624; --panel: #2f2f2d; --panel2: #393937; --border: #44443f;
@@ -35,7 +48,8 @@
   button.ghost:hover { color: var(--text); }
   button:disabled { opacity: .5; cursor: default; }
 
-  .brandMark, .dodecaSpinner { width: 28px; height: 28px; color: var(--accent); flex-shrink: 0; }
+  .brandMount { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; line-height: 0; }
+  .brandMark, .dodecaSpinner { width: 28px; height: 28px; color: var(--accent); flex-shrink: 0; display: block; }
   .brandMark polygon, .brandMark path, .dodecaSpinner polygon, .dodecaSpinner path {
     vector-effect: non-scaling-stroke;
   }
@@ -47,6 +61,11 @@
     fill: none; stroke: currentColor; stroke-width: 1.45; stroke-linecap: round; stroke-linejoin: round;
     opacity: .82;
   }
+  .uiIcon { width: 15px; height: 15px; flex: 0 0 auto; display: inline-block; color: currentColor;
+            stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  button .uiIcon { margin-right: 6px; vertical-align: -2px; }
+  .chip .uiIcon { width: 14px; height: 14px; }
+  .nav .uiIcon { width: 15px; height: 15px; opacity: .92; }
   .dodecaSpinner {
     animation: dodecaSpin 2.8s linear infinite;
     transform-origin: 50% 50%;
@@ -72,10 +91,12 @@
   /* ---- sidebar ---- */
   #side { width: 230px; background: var(--side); border-right: 1px solid var(--border);
           display: flex; flex-direction: column; padding: 14px 10px 10px; flex-shrink: 0; }
-  #logo { font-weight: 700; font-size: 15px; padding: 2px 10px 14px; letter-spacing: .3px; cursor: pointer;
-          display: flex; align-items: center; gap: 9px; }
-  #logo .brandMark { width: 24px; height: 24px; }
-  #logo span { color: var(--accent); }
+  #logo { font-weight: 700; font-size: 15px; line-height: 1; padding: 2px 10px 14px; letter-spacing: .3px; cursor: pointer;
+          display: flex; align-items: center; gap: 8px; }
+  #logo .brandMount { width: 19px; height: 19px; transform: translateY(.5px); }
+  #logo .brandMark { width: 19px; height: 19px; }
+  #logo .appName { color: var(--accent); }
+  #logo .appName .studioName { color: var(--text); }
   #btnNew { margin: 0 6px 14px; text-align: left; }
   #side .sect { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .8px; padding: 8px 12px 4px; }
   #chatList { flex: 1; overflow-y: auto; }
@@ -104,8 +125,9 @@
 
   /* ---- landing (stile app Claude Code) ---- */
   #homePage.on { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px; }
-  #hello { font-size: 26px; font-weight: 600; margin-bottom: 6px; display: flex; gap: 12px; align-items: center; }
-  #hello .brandMark { width: 34px; height: 34px; }
+  #hello { font-size: 26px; line-height: 1.08; font-weight: 600; margin-bottom: 6px; display: flex; gap: 11px; align-items: center; }
+  #hello .brandMount { width: 29px; height: 29px; transform: translateY(.5px); }
+  #hello .brandMark { width: 29px; height: 29px; }
   #helloSub { color: var(--dim); margin-bottom: 26px; font-size: 13.5px; }
   #box { width: min(720px, 92%); background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
          padding: 14px 16px 12px; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
@@ -126,7 +148,7 @@
   .ritem { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 12px; cursor: pointer;
            border: 1px solid transparent; }
   .ritem:hover { background: var(--panel); border-color: var(--border); }
-  .ritem .ic { color: var(--dim); }
+  .ritem .ic { color: var(--dim); line-height: 0; display: inline-flex; }
   .ritem .name { font-weight: 500; }
   .ritem .path { color: var(--dim); font-size: 11.5px; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ritem .when { margin-left: auto; color: var(--dim); font-size: 11.5px; flex-shrink: 0; }
@@ -145,8 +167,6 @@
   .msg .think { color: var(--dim); font-size: 12px; border-left: 2px solid var(--border); padding-left: 10px;
                 margin-bottom: 8px; white-space: pre-wrap; }
   .msg .tools { color: var(--dim); font-size: 11.5px; font-family: var(--mono); }
-  .msg .loading { display: inline-flex; align-items: center; gap: 10px; color: var(--dim); }
-  .msg .loading .dodecaSpinner { width: 26px; height: 26px; }
   /* card di approvazione permessi (richieste interattive dal permtool) */
   .permCard { background: var(--panel); border: 1px solid var(--warn); border-radius: 12px;
               padding: 11px 14px; margin: 10px 0; }
@@ -159,9 +179,15 @@
   .permCard .pr { display: flex; gap: 8px; flex-wrap: wrap; }
   .permCard .pr button { padding: 6px 12px; font-size: 12.5px; }
   .permCard .done { color: var(--dim); font-size: 12px; }
-  /* indicatore inferenza nel composer: dodecaedro che si riempie finché lo stream è vivo */
-  #busyMark { display: none; align-self: center; line-height: 0; }
+  /* indicatore inferenza: unico spinner, subito sopra la casella prompt */
+  .inferLine { display: flex; align-items: center; gap: 10px; min-height: 24px; margin: 0 0 7px 2px; }
+  #busyMark { display: inline-flex; align-items: center; gap: 8px; color: var(--dim); font-size: 12px;
+              line-height: 1; }
   #busyMark .dodecaSpinner { width: 22px; height: 22px; }
+  #busyMark .busyText { display: none; }
+  #busyMark.on .busyText { display: inline; }
+  #busyMark:not(.on) .dodecaSpinner { animation: none; }
+  #busyMark:not(.on) .dodecaSpinner .face { animation: none; fill: color-mix(in srgb, var(--accent) 18%, transparent); opacity: .72; }
   /* spinner lineart piccolo per i bottoni (azioni server in corso) */
   .spinner { display: inline-block; width: 11px; height: 11px; border: 1.5px solid currentColor;
              border-top-color: transparent; border-radius: 50%; vertical-align: -1px;
@@ -178,7 +204,7 @@
   .body.md code { background: var(--panel2); border: 1px solid var(--border); border-radius: 5px;
                   padding: 1px 5px; font: 12px var(--mono); }
   .body.md pre.cb { background: var(--logbg); border: 1px solid var(--border); border-radius: 9px;
-                    padding: 10px 12px; overflow-x: auto; }
+                    padding: 10px 12px; overflow-x: auto; position: relative; }
   .body.md pre.cb code { background: none; border: none; padding: 0; font: 12px/1.5 var(--mono);
                          white-space: pre; color: var(--logtx); }
   .body.md blockquote { border-left: 3px solid var(--border); padding-left: 10px; color: var(--dim); }
@@ -187,6 +213,8 @@
   .body.md table { border-collapse: collapse; font-size: 12.5px; }
   .body.md th, .body.md td { border: 1px solid var(--border); padding: 4px 9px; text-align: left; }
   .body.md th { background: var(--panel2); }
+  mjx-container { color: var(--text); overflow-x: auto; overflow-y: hidden; max-width: 100%; }
+  mjx-container[jax="SVG"][display="true"] { margin: 10px 0; }
   .content > div + div { margin-top: 7px; }   /* respiro tra blocchi testo/tool intercalati */
   /* azioni sotto il blocco (stile classico: icona copia con due quadrati) */
   .msg { flex-direction: column; align-items: flex-start; }
@@ -204,7 +232,13 @@
                padding: 5px; cursor: pointer; color: var(--dim); z-index: 3; line-height: 0; }
   .msg.tall .copyFloat { display: inline-flex; }
   .copyFloat:hover { color: var(--text); border-color: var(--accent); }
-  #stats { font-size: 11px; color: var(--dim); font-family: var(--mono); padding: 2px 26px; }
+  button.codeCopy { position: sticky; top: 6px; float: right; margin: -4px -6px 6px 10px;
+                    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+                    padding: 5px; cursor: pointer; color: var(--dim); z-index: 2; line-height: 0; }
+  button.codeCopy:hover { color: var(--text); border-color: var(--accent); }
+  button.codeCopy svg { width: 14px; height: 14px; stroke: currentColor; fill: none;
+                        stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  #stats { font: 11px/1.2 var(--mono); color: color-mix(in srgb, var(--dim) 84%, var(--text)); }
   #composer { padding: 10px 24px 16px; max-width: 880px; width: 100%; margin: 0 auto; }
   .cbox { display: flex; align-items: flex-end; gap: 6px; background: var(--panel); border: 1px solid var(--border);
           border-radius: 14px; padding: 8px 8px 8px 14px; position: relative; }
@@ -290,15 +324,15 @@
 <body>
 
 <nav id="side">
-  <div id="logo" onclick="go('home')"><span class="brandMount" aria-hidden="true"></span><span>ccllrun <span>Studio</span></span></div>
+  <div id="logo" onclick="go('home')"><span class="brandMount" aria-hidden="true"></span><span class="appName">ccllrun <span class="studioName">Studio</span></span></div>
   <button id="btnNew" onclick="go('home')">＋ Nuova chat</button>
   <div class="sect">Chat</div>
   <div id="chatList"></div>
   <div class="sect" style="margin-top:8px">Sistema</div>
-  <div class="nav" data-p="status" onclick="go('status')"><span>⌂</span> Stato</div>
-  <div class="nav" data-p="config" onclick="go('config')"><span>⚙︎</span> Config</div>
-  <div class="nav" data-p="logs" onclick="go('logs')"><span>≣</span> Log</div>
-  <div class="nav" onclick="location.reload()" title="Ricarica l'interfaccia dal server (la WKWebView non ha ⌘R)"><span>↻</span> Ricarica UI</div>
+  <div class="nav" data-p="status" onclick="go('status')"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M4 12h4l3-7 4 14 3-7h2"/></svg> Stato</div>
+  <div class="nav" data-p="config" onclick="go('config')"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg> Config</div>
+  <div class="nav" data-p="logs" onclick="go('logs')"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 12h6M10 16h6"/></svg> Log</div>
+  <div class="nav" onclick="location.reload()" title="Ricarica l'interfaccia dal server (la WKWebView non ha ⌘R)"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M20 6v5h-5"/><path d="M20 11a8 8 0 1 0-2.3 5.7"/></svg> Ricarica UI</div>
   <div class="foot">ccllrun Studio — modelli locali, nessun cloud</div>
 </nav>
 
@@ -311,7 +345,7 @@
     <div id="box">
       <textarea id="homeInp" placeholder="Come posso aiutarti oggi?"></textarea>
       <div id="boxBar">
-        <span class="chip add" id="homeAddDir">📁 Aggiungi progetto…</span>
+        <span class="chip add" id="homeAddDir"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M3 6.5h7l2 2h9v9.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 8.5h18"/></svg> Aggiungi progetto…</span>
         <span id="homeDirs"></span>
         <span id="engineBadge"><span class="dot err" id="engineDot"></span><span id="engineTxt">engine…</span></span>
         <button class="icon send" id="homeSend" title="Avvia chat">
@@ -330,7 +364,7 @@
     <div id="chatHead">
       <span id="chatTitle"></span>
       <span id="chatDirs"></span>
-      <span class="chip add" id="chatAddDir">📁 +</span>
+      <span class="chip add" id="chatAddDir"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M3 6.5h7l2 2h9v9.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 8.5h18M12 12v5M9.5 14.5h5"/></svg> +</span>
       <span style="margin-left:auto"></span>
       <select id="permSel" title="In headless non esiste il prompt interattivo di approvazione: i comandi non coperti dalla modalità vengono negati. Per compilare/eseguire serve 'tutto consentito'.">
         <option value="acceptEdits">permessi: modifiche file</option>
@@ -340,11 +374,13 @@
       <button id="btnLaunch">⌁ Apri in Claude Code</button>
     </div>
     <div id="msgs"></div>
-    <div id="stats"></div>
     <div id="composer">
+      <div class="inferLine">
+        <span id="busyMark" title="Inferenza in corso"></span>
+        <span id="stats"></span>
+      </div>
       <div class="cbox">
         <textarea id="inp" placeholder="Scrivi…  (Invio per inviare anche durante l'inferenza, Maiusc+Invio a capo)"></textarea>
-        <span id="busyMark" title="Inferenza in corso"></span>
         <button class="icon stop" id="btnStop" title="Interrompi" style="display:none">
           <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
         </button>
@@ -361,7 +397,7 @@
     <div class="sub">Stack locale: llama-server (big + small) e proxy Anthropic→OpenAI per Claude Code.</div>
     <div class="row">
       <button class="primary" id="btnToggle">▶ Avvia server</button>
-      <button id="btnRestart" title="Ferma e riavvia tutto lo stack">↻ Riavvia</button>
+      <button id="btnRestart" title="Ferma e riavvia tutto lo stack"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M20 6v5h-5"/><path d="M20 11a8 8 0 1 0-2.3 5.7"/></svg> Riavvia</button>
       <span id="startMsg"></span>
     </div>
     <div class="cards" id="srvCards"></div>
@@ -410,6 +446,8 @@ const $ = s => document.querySelector(s);
 const HDRS = { "X-Requested-With": "ccllrun-studio" };
 const esc = t => { const d = document.createElement("div"); d.textContent = t; return d.innerHTML; };
 const base = p => p.replace(/\/+$/, "").split("/").pop() || p;
+const ICON_FOLDER = `<svg class="uiIcon" viewBox="0 0 24 24"><path d="M3 6.5h7l2 2h9v9.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 8.5h18"/></svg>`;
+const ICON_CHAT = `<svg class="uiIcon" viewBox="0 0 24 24"><path d="M5 6.5h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-8l-5 3v-3H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z"/></svg>`;
 
 /* ============ marchio dodecaedro ============ */
 /* L'SVG vive in web/mark.svg (file esterno, generato una volta): qui viene solo
@@ -420,7 +458,7 @@ const markReady = fetch("/mark.svg").then(r => r.text()).then(svg => {
   DODECA_SVG = svg.replace("<svg ", '<svg class="brandMark" ');
   DODECA_SPINNER = svg.replace("<svg ", '<svg class="dodecaSpinner" ');
   document.querySelectorAll(".brandMount").forEach(el => { el.innerHTML = DODECA_SVG; });
-  const busy = $("#busyMark"); if (busy) busy.innerHTML = DODECA_SPINNER;
+  const busy = $("#busyMark"); if (busy) busy.innerHTML = DODECA_SPINNER + '<span class="busyText">elaborazione…</span>';
 }).catch(() => {});
 
 /* ============ stato persistente: sessioni chat ============ */
@@ -519,7 +557,7 @@ async function pickDir() {
 
 function chipHtml(dirs, removable) {
   return dirs.map((d, i) =>
-    `<span class="chip" title="${esc(d)}">📁 ${esc(base(d))}${removable ? ` <span class="x" data-i="${i}">✕</span>` : ""}</span>`
+    `<span class="chip" title="${esc(d)}">${ICON_FOLDER} ${esc(base(d))}${removable ? ` <span class="x" data-i="${i}">✕</span>` : ""}</span>`
   ).join(" ");
 }
 
@@ -554,7 +592,7 @@ function renderRecents() {
     return m < 60 ? Math.max(1, m | 0) + " min fa" : m < 1440 ? (m / 60 | 0) + " h fa" : (m / 1440 | 0) + " g fa"; };
   $("#recentList").innerHTML = sessions.slice(0, 8).map(s => `
     <div class="ritem" data-id="${s.id}">
-      <span class="ic">${s.dirs.length ? "📁" : "💬"}</span>
+      <span class="ic">${s.dirs.length ? ICON_FOLDER : ICON_CHAT}</span>
       <span><div class="name">${esc(s.title)}</div>
         ${s.dirs.length ? `<div class="path">${esc(s.dirs.join("  ·  "))}</div>` : ""}</span>
       <span class="when">${ago(s.ts)}</span>
@@ -655,12 +693,22 @@ const mdOn = () => lastStatus?.config?.studio_markdown !== false;
 
 function mdToHtml(src) {
   // 1) metti in salvo i blocchi ``` prima di ogni altra trasformazione
-  const codes = [];
+  const codes = [], maths = [];
   src = src.replace(/```\w*\n?([\s\S]*?)```/g, (_, code) => {
     codes.push(`<pre class="cb"><code>${esc(code.replace(/\n$/, ""))}</code></pre>`);
     return "" + (codes.length - 1) + "";
   });
+  const stashMath = (tex, open, close) => {
+    maths.push(esc(open + tex + close));
+    return "" + (maths.length - 1) + "";
+  };
+  src = src
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_, m) => stashMath(m, "\\[", "\\]"))
+    .replace(/\$\$([\s\S]*?)\$\$/g, (_, m) => stashMath(m, "$$", "$$"))
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_, m) => stashMath(m, "\\(", "\\)"))
+    .replace(/(^|[^\$])\$([^\n$]+?)\$/g, (_, p, m) => p + stashMath(m, "$", "$"));
   const inline = t => esc(t)
+    .replace(/(\d+)/g, (_, i) => maths[+i])
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
     .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,;:!?]|$)/g, "$1<i>$2</i>")
@@ -692,7 +740,34 @@ function mdToHtml(src) {
   }
   flush();
   // 3) i placeholder rimasti in mezzo a un paragrafo
-  return html.replace(/(\d+)/g, (_, i) => codes[+i]);
+  return html
+    .replace(/(\d+)/g, (_, i) => codes[+i])
+    .replace(/(\d+)/g, (_, i) => maths[+i]);
+}
+
+function wireCodeCopy(root) {
+  root.querySelectorAll("pre.cb").forEach(pre => {
+    if (pre.querySelector(".codeCopy")) return;
+    const btn = document.createElement("button");
+    btn.className = "codeCopy";
+    btn.title = "Copia codice";
+    btn.innerHTML = COPY_SVG;
+    btn.onclick = async e => {
+      e.preventDefault();
+      e.stopPropagation();
+      await copyToClipboard(pre.querySelector("code")?.innerText || pre.innerText);
+      btn.style.color = "var(--ok)";
+      btn.title = "Codice copiato";
+      setTimeout(() => { btn.style.color = ""; btn.title = "Copia codice"; }, 1200);
+    };
+    pre.prepend(btn);
+  });
+}
+
+function typesetMath(root) {
+  const run = () => window.MathJax?.typesetPromise?.([root]).catch(() => {});
+  if (window.MathJax?.startup?.promise) window.MathJax.startup.promise.then(run);
+  else setTimeout(run, 0);
 }
 
 /* crea un blocco .body: markdown se l'opzione è attiva, testo grezzo altrimenti.
@@ -700,7 +775,7 @@ function mdToHtml(src) {
 function bodyEl(txt) {
   const el = document.createElement("div");
   el.dataset.raw = txt;
-  if (mdOn()) { el.className = "body md"; el.innerHTML = mdToHtml(txt); }
+  if (mdOn()) { el.className = "body md"; el.innerHTML = mdToHtml(txt); wireCodeCopy(el); typesetMath(el); }
   else { el.className = "body"; el.textContent = txt; }
   return el;
 }
@@ -776,15 +851,48 @@ function summarizeToolUse(name, input) {
 /* Invio sempre possibile (come in Claude Code: i messaggi inviati durante
    l'inferenza vanno in coda e partono al turno successivo); lo stop appare
    solo durante lo streaming e uccide il processo claude di quel turno. */
-let streaming = false, aborter = null;
+let streaming = false, aborter = null, inferTimer = null, inferStartedAt = 0;
 const queue = [];
 
 function updateComposer() {
   $("#btnStop").style.display = streaming ? "" : "none";
-  // dodecaedro che si riempie: visibile per tutta la durata dell'inferenza
   const busy = $("#busyMark");
-  if (!busy.innerHTML && DODECA_SPINNER) busy.innerHTML = DODECA_SPINNER;
-  busy.style.display = streaming ? "inline-flex" : "none";
+  if (!busy.innerHTML && DODECA_SPINNER) busy.innerHTML = DODECA_SPINNER + '<span class="busyText">elaborazione…</span>';
+  busy.classList.toggle("on", streaming);
+}
+
+function usageStats(ev) {
+  const u = ev.usage || ev.message?.usage || {};
+  const input = u.input_tokens || u.input || 0;
+  const output = u.output_tokens || u.output || 0;
+  const cacheCreate = u.cache_creation_input_tokens || 0;
+  const cacheRead = u.cache_read_input_tokens || 0;
+  const total = u.total_tokens || input + output + cacheCreate + cacheRead;
+  return { input, output, total };
+}
+
+function formatInferStats(ev, elapsedMs, live = false) {
+  const secs = Math.max(0, elapsedMs / 1000);
+  const parts = [live ? "in corso" : `${ev?.num_turns ?? "?"} turni`, `${secs.toFixed(1)} s`];
+  const u = ev ? usageStats(ev) : { output: 0, total: 0 };
+  if (u.total) parts.push(`${u.total} token`);
+  if (u.output && secs > 0) parts.push(`${(u.output / secs).toFixed(1)} tok/s`);
+  return parts.join(" · ");
+}
+
+function startInferStats() {
+  inferStartedAt = performance.now();
+  clearInterval(inferTimer);
+  $("#stats").textContent = formatInferStats(null, 0, true);
+  inferTimer = setInterval(() => {
+    $("#stats").textContent = formatInferStats(null, performance.now() - inferStartedAt, true);
+  }, 500);
+}
+
+function stopInferStats(finalText) {
+  clearInterval(inferTimer);
+  inferTimer = null;
+  if (finalText) $("#stats").textContent = finalText;
 }
 $("#btnStop").onclick = () => { queue.length = 0; aborter?.abort(); };  // ferma il turno e svuota la coda
 
@@ -808,12 +916,13 @@ function sendMessage(forcedText) {
 }
 
 async function processQueue() {
-  streaming = true; updateComposer();
+  streaming = true; updateComposer(); startInferStats();
   while (queue.length) {
     const { s, text } = queue.shift();
     await runTurn(s, text);
   }
   streaming = false; updateComposer();
+  if (inferTimer) stopInferStats($("#stats").textContent.replace("in corso", "ultima"));
 }
 
 /* Il turno NON dipende dalla pagina visibile: il fumetto vive in activeTurn e
@@ -859,8 +968,8 @@ async function runTurn(s, text) {
   activeTurn = { sid: s.id, div };
   const transcript = [];
   let pending = document.createElement("div");
-  pending.className = "body loading";
-  pending.innerHTML = DODECA_SPINNER + "<span>elaborazione…</span>";
+  pending.className = "body";
+  pending.textContent = "elaborazione…";
   content.appendChild(pending);
   const addBlock = (cls, txt) => {
     if (pending) { pending.remove(); pending = null; }
@@ -926,8 +1035,7 @@ async function runTurn(s, text) {
             addBlock("body", answer);
           }
           if (here()) {
-            const secs = ((ev.duration_ms || (performance.now() - t0)) / 1000).toFixed(1);
-            $("#stats").textContent = `${ev.num_turns ?? "?"} turni · ${secs} s`;
+            stopInferStats(formatInferStats(ev, ev.duration_ms || (performance.now() - t0), false));
           }
         } else if (ev.type === "studio_error") {
           throw new Error(ev.error);
@@ -953,6 +1061,7 @@ async function runTurn(s, text) {
   clearInterval(permTimer);
   if (pending) pending.remove();
   activeTurn = null; aborter = null;
+  if (!streaming) stopInferStats();
   if (here()) refreshTall();
 }
 $("#btnSend").onclick = () => sendMessage();

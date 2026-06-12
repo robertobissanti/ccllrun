@@ -60,6 +60,8 @@ First run bootstraps the rest by itself: `~/.ccllrun/`, the Python venv with the
 
 The proxy's Python modules (`aiohttp`, `pymupdf`) are installed **automatically** on first run into `~/.ccllrun/venv`. External dependencies (llama.cpp, Claude Code) are not vendored: they are large projects with their own installers and release cycles — Studio's *setup doctor* checks for them and suggests the install command for each.
 
+Studio vendors **MathJax 3** locally (`studio/web/vendor/mathjax/tex-svg.js`) to render LaTeX equations in chat replies. It is bundled into the `.app` by `make`, served from `/vendor/...`, and does not require network access at runtime.
+
 In `~/.claude/settings.json` add (the script warns if missing):
 
 ```json
@@ -157,6 +159,7 @@ The app is **not distributed pre-built**: you compile it yourself with `make`. T
 - **Chat** = headless Claude Code in the project folder you pick (first folder is the cwd, the others go to `--add-dir`). The conversation continues with `--resume`.
 - **Permissions**: per-chat selector (*file edits* / *allow everything* / *plan only*). In normal mode, when Claude wants to run an uncovered command an **approval card** appears with the exact command: *Allow* (once), *Always allow* (saves the rule, e.g. `Bash(gcc:*)`, into the project's `.claude/settings.local.json`), *Deny*.
 - **Markdown** in replies (toggle in Config → Studio); copying always returns the original markdown.
+- **LaTeX math** in replies through vendored MathJax (`$...$`, `$$...$$`, `\(...\)`, `\[...\]`), rendered offline as SVG.
 - **Slash commands** with autocomplete: `/context`, `/memory`, `/compact`, `/cost`, `/init`, plus the project's custom commands.
 - **Status**: Start/Stop toggle + Restart, server health cards, setup doctor with remedies.
 - **Config**: graphical (or raw JSON) editor for `~/.ccllrun/config.json`. After changing server parameters: Restart.
@@ -252,4 +255,5 @@ After changing server parameters: `ccllrun stop` and restart (or Studio → Stat
 
 - **MIT** license — see [LICENSE](LICENSE).
 - Studio's native wrapper (C++ launcher + WKWebView, `studio/native/webview.h`) and the dashboard approach derive from **[DStudio](https://github.com/sk8erboi17/DStudio)** by **Giuseppe Perrotta** (BSD-3-Clause, see `studio/native/LICENSE.DStudio`). Thank you!
+- Studio vendors **MathJax 3** for offline SVG rendering of LaTeX math in chat replies.
 - Engine: [llama.cpp](https://github.com/ggml-org/llama.cpp) · Agent: [Claude Code](https://docs.anthropic.com/claude-code) · Models: [Qwen](https://huggingface.co/Qwen) quantized by [unsloth](https://huggingface.co/unsloth).

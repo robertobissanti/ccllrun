@@ -568,6 +568,7 @@ def main():
     app.on_startup.append(autostart_stack)
     app.router.add_get("/", index)
     app.router.add_get("/mark.svg", mark_svg)
+    app.router.add_static("/vendor", HERE / "web" / "vendor")
     app.router.add_get("/api/status", api_status)
     app.router.add_post("/api/start", api_start)
     app.router.add_post("/api/stop", api_stop)
