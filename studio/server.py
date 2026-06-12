@@ -64,6 +64,7 @@ DEFAULTS = {
     "big_gguf": str(Path.home() / ".lmstudio/models/unsloth/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"),
     "small_gguf": str(Path.home() / ".lmstudio/models/ghost-actual/Qwen3.6-9B-Heretic-History-Q4_K_M-GGUF/history-9b-Q4_K_M.gguf"),
     "studio_markdown": True,
+    "studio_autostart": True,
 }
 
 LOGS = {"big": "llama-big.log", "small": "llama-small.log", "proxy": "proxy.log"}
@@ -543,8 +544,28 @@ async def mark_svg(request):
                                      "Content-Type": "image/svg+xml"})
 
 
+async def autostart_stack(app):
+    """All'avvio di Studio avvia lo stack (big+small+proxy) come fa la CLI,
+    se la config lo prevede e il proxy non e' gia' su. Non blocca la UI:
+    gira in background, lo Stato si aggiorna da solo col polling."""
+    cfg = load_config()
+    if not cfg.get("studio_autostart", True) or not Path(CCLLRUN_BIN).is_file():
+        return
+    if await http_json(f"http://127.0.0.1:{cfg['proxy_port']}/v1/models") is not None:
+        return                                    # gia' attivo
+
+    async def run():
+        proc = await asyncio.create_subprocess_exec(
+            "bash", CCLLRUN_BIN, "servers", env=aug_env(),
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+        out, _ = await proc.communicate()
+        print(f"[studio] autostart: {out.decode(errors='replace').strip()}", flush=True)
+    asyncio.ensure_future(run())
+
+
 def main():
     app = web.Application(client_max_size=64 * 1024 * 1024)
+    app.on_startup.append(autostart_stack)
     app.router.add_get("/", index)
     app.router.add_get("/mark.svg", mark_svg)
     app.router.add_get("/api/status", api_status)

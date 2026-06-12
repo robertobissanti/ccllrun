@@ -17,5 +17,11 @@
   "model_big": "qwen-big",
   "model_small": "small-fast",
   "no_small": false,
-  "extra_big_flags": ""
+  "extra_big_flags": "",
+
+  "cc_auto_compact_window": 115000,
+  "cc_max_output_tokens": 32000,
+
+  "studio_markdown": true,
+  "studio_autostart": true
 }

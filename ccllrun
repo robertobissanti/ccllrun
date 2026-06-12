@@ -226,8 +226,17 @@ if [[ "$NO_SMALL" != "1" && -n "$SMALL_GGUF" && "$SMALL_GGUF" != "$BIG_GGUF" && 
 fi
 
 # ---------- proxy + claude ----------
+# bootstrap: ~/.ccllrun e proxy.py vengono creati/aggiornati dal repo, cosi'
+# l'installazione per terzi e' solo "ln -s ccllrun nel PATH"
+mkdir -p "$CC_DIR"
+SELF="$0"; [[ -L "$SELF" ]] && SELF="$(readlink "$SELF")"
+SELF_DIR="$(cd "$(dirname "$SELF")" && pwd)"
+if [[ -f "$SELF_DIR/proxy.py" ]] && ! cmp -s "$SELF_DIR/proxy.py" "$CC_DIR/proxy.py"; then
+  cp "$SELF_DIR/proxy.py" "$CC_DIR/proxy.py"
+  echo "[ccllrun] proxy.py installato/aggiornato in $CC_DIR"
+fi
 if [[ ! -f "$CC_DIR/proxy.py" ]]; then
-  echo "[ccllrun] manca $CC_DIR/proxy.py" >&2
+  echo "[ccllrun] manca $CC_DIR/proxy.py (e non trovo proxy.py accanto allo script)" >&2
   exit 1
 fi
 if [[ ! -x "$VENV/bin/python" ]]; then
