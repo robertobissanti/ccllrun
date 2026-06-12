@@ -89,10 +89,23 @@ ccllrun --no-small              # senza modello piccolo
 ccllrun --pdf-mode text         # PDF solo come testo estratto
 ccllrun servers                 # solo i server, senza Claude Code (usato da Studio)
 ccllrun stop                    # ferma i llama-server
+ccllrun logs                    # segue il log del modello big (tail -f)
 ccllrun --help-ccllrun          # aiuto
 ```
 
 I sottocomandi puri di `claude` (`doctor`, `mcp`, `config`, `update`, `--version`, …) passano direttamente senza avviare i server.
+
+### Osservare i log da un altro terminale
+
+Mentre Claude Code gira, apri altre finestre di terminale per seguire cosa fanno i server:
+
+```bash
+ccllrun logs big       # il modello principale: caricamento, token/s, errori di memoria
+ccllrun logs small     # il modello rapido
+ccllrun logs proxy     # le richieste Anthropic→OpenAI, conversioni PDF, errori 4xx/5xx
+```
+
+(equivale a `tail -f ~/.ccllrun/llama-big.log` ecc.; in alternativa c'è la pagina **Log** di Studio, che si aggiorna da sola). Utile in particolare `logs big` al primo avvio — il caricamento del modello può richiedere 1–2 minuti e lì si vede il progresso — e quando qualcosa non risponde: gli out-of-memory Metal e i `failed to parse grammar` compaiono solo qui.
 
 ## Uso (Studio)
 

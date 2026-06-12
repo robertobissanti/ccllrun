@@ -112,6 +112,7 @@ Opzioni:
   --pdf-mode <m>         text|image|hybrid (default $PDF_MODE)
   --port <n>             porta proxy (default $PORT)
   stop                   ferma i llama-server
+  logs [big|small|proxy] segui il log indicato (tail -f, default: big)
   --help-ccllrun         questo aiuto
 
 Config JSON ($CONFIG_FILE), chiavi: big_gguf, small_gguf, ctx_big, ctx_small,
@@ -140,6 +141,16 @@ while [[ $# -gt 0 ]]; do
     *)               CLAUDE_ARGS+=("$1"); shift ;;
   esac
 done
+
+# ---------- logs: non serve la config, rispondi subito ----------
+if [[ "${CLAUDE_ARGS[0]:-}" == "logs" ]]; then
+  case "${CLAUDE_ARGS[1]:-big}" in
+    big)   exec tail -f "$CC_DIR/llama-big.log" ;;
+    small) exec tail -f "$CC_DIR/llama-small.log" ;;
+    proxy) exec tail -f "$CC_DIR/proxy.log" ;;
+    *) echo "uso: ccllrun logs [big|small|proxy]" >&2; exit 1 ;;
+  esac
+fi
 
 apply_config "$CONFIG_FILE"
 apply_env
