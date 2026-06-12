@@ -138,6 +138,22 @@ make serve      # solo server su :8770 (sviluppo / LAN con STUDIO_HOST=0.0.0.0)
 
 All'avvio Studio fa partire da solo lo stack (big + small + proxy), come la CLI; disattivabile con `"studio_autostart": false`.
 
+### Compilazione e Gatekeeper (firma del codice)
+
+L'app **non viene distribuita già compilata**: la costruisci tu con `make`. È una scelta voluta — aggira completamente il problema delle firme macOS:
+
+- **Compilata dai sorgenti** (la via supportata): un'app costruita in locale non ha l'attributo di quarantena, e su Apple Silicon il linker applica da solo una firma ad-hoc. Si apre normalmente, senza avvisi.
+- **Se la `.app` ti arriva da altrove** (zip, AirDrop, un altro Mac): macOS la mette in quarantena e Gatekeeper dirà che è *"danneggiata o di uno sviluppatore non identificato"*. O la ricompili dai sorgenti (consigliato), o togli la quarantena e ri-firmi ad-hoc:
+
+  ```bash
+  xattr -dr com.apple.quarantine "ccllrun Studio.app"
+  codesign --force --deep -s - "ccllrun Studio.app"
+  ```
+
+- **Per chi volesse distribuire binari**: serve un certificato Apple Developer ID (`codesign -s "Developer ID Application: …"` + notarizzazione con `xcrun notarytool submit`). Fino ad allora, "compila dai sorgenti" è l'unica via senza attriti — e richiede secondi: il wrapper è un singolo piccolo file C++.
+
+> Ricompilare dopo ogni `git pull` è comunque buona pratica: `make` aggiorna anche le copie di `server.py`, `ccllrun` e della web UI incorporate nell'app.
+
 - **Chat** = Claude Code headless nella cartella di progetto che scegli (la prima è il cwd, le altre vanno in `--add-dir`). La conversazione prosegue con `--resume`.
 - **Permessi**: selettore per chat (*modifiche file* / *tutto consentito* / *solo piano*). In modalità normale, quando Claude vuole eseguire un comando non coperto compare una **card di approvazione** con il comando esatto: *Consenti* (una volta), *Consenti sempre* (salva la regola, es. `Bash(gcc:*)`, in `.claude/settings.local.json` del progetto), *Nega*.
 - **Markdown** nelle risposte (interruttore in Config → Studio); la copia restituisce sempre il markdown originale.

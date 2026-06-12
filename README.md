@@ -138,6 +138,22 @@ make serve      # server only on :8770 (development / LAN with STUDIO_HOST=0.0.0
 
 On launch Studio starts the stack by itself (big + small + proxy), just like the CLI; disable with `"studio_autostart": false`.
 
+### Building and Gatekeeper (code signing)
+
+The app is **not distributed pre-built**: you compile it yourself with `make`. This is deliberate — it sidesteps macOS code-signing entirely:
+
+- **Built from source** (the supported path): a locally-built app carries no quarantine attribute, and on Apple Silicon the linker applies an ad-hoc signature automatically. It opens normally, no warnings.
+- **If you ever get the `.app` from somewhere else** (zip, AirDrop, another machine): macOS quarantines it and Gatekeeper will claim it is *"damaged or from an unidentified developer"*. Either rebuild it from source (recommended), or remove the quarantine flag and re-sign ad-hoc:
+
+  ```bash
+  xattr -dr com.apple.quarantine "ccllrun Studio.app"
+  codesign --force --deep -s - "ccllrun Studio.app"
+  ```
+
+- **For maintainers who want to distribute binaries**: you need an Apple Developer ID certificate (`codesign -s "Developer ID Application: …"` + `xcrun notarytool submit` for notarization). Until then, "build from source" is the only friction-free path — and it takes seconds, the wrapper is a single small C++ file.
+
+> Rebuilding after every `git pull` is good practice anyway: `make` also refreshes the app's embedded copies of `server.py`, `ccllrun` and the web UI.
+
 - **Chat** = headless Claude Code in the project folder you pick (first folder is the cwd, the others go to `--add-dir`). The conversation continues with `--resume`.
 - **Permissions**: per-chat selector (*file edits* / *allow everything* / *plan only*). In normal mode, when Claude wants to run an uncovered command an **approval card** appears with the exact command: *Allow* (once), *Always allow* (saves the rule, e.g. `Bash(gcc:*)`, into the project's `.claude/settings.local.json`), *Deny*.
 - **Markdown** in replies (toggle in Config → Studio); copying always returns the original markdown.
