@@ -239,6 +239,81 @@ async def api_launch(request):
 
 CLAUDE_SEM = asyncio.Semaphore(3)   # max processi claude simultanei dall'API
 
+# ------------------------------------------- approvazioni interattive (permtool)
+# In headless non c'e' il prompt di Claude Code: `--permission-prompt-tool`
+# fa passare ogni richiesta di permesso da permtool.py (MCP) -> /api/perm/ask.
+# La richiesta resta qui in attesa finche' la GUI risponde via /api/perm/reply.
+PERM_PENDING = {}    # id -> {"event": asyncio.Event, "reply": dict|None, "info": dict}
+PERM_SEQ = 0
+
+
+async def api_perm_ask(request):
+    # chiamata da permtool.py (localhost), non dalla GUI: niente CSRF
+    global PERM_SEQ
+    data = await request.json()
+    PERM_SEQ += 1
+    pid = str(PERM_SEQ)
+    entry = {"event": asyncio.Event(), "reply": None,
+             "info": {"id": pid, "tool_name": data.get("tool_name") or "",
+                      "input": data.get("input") or {}, "cwd": data.get("cwd") or ""}}
+    PERM_PENDING[pid] = entry
+    try:
+        await asyncio.wait_for(entry["event"].wait(), timeout=600)
+    except asyncio.TimeoutError:
+        entry["reply"] = {"behavior": "deny", "message": "nessuna risposta dalla GUI (timeout)"}
+    finally:
+        PERM_PENDING.pop(pid, None)
+    reply = entry["reply"] or {"behavior": "deny", "message": "annullato"}
+    if reply.get("behavior") == "allow":
+        reply.setdefault("updatedInput", entry["info"]["input"])
+    return web.json_response(reply)
+
+
+async def api_perm_pending(request):
+    return web.json_response(
+        {"pending": [e["info"] for e in PERM_PENDING.values() if e["reply"] is None]})
+
+
+def add_allow_rule(cwd, rule):
+    """Aggiunge una regola permissions.allow in .claude/settings.local.json del progetto."""
+    p = Path(cwd) / ".claude" / "settings.local.json"
+    try:
+        cfg = json.loads(p.read_text())
+    except Exception:
+        cfg = {}
+    allow = cfg.setdefault("permissions", {}).setdefault("allow", [])
+    if rule not in allow:
+        allow.append(rule)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(cfg, indent=2) + "\n")
+    return rule
+
+
+async def api_perm_reply(request):
+    require_csrf(request)
+    data = await request.json()
+    entry = PERM_PENDING.get(str(data.get("id")))
+    if not entry or entry["reply"] is not None:
+        return web.json_response({"ok": False, "error": "richiesta scaduta"}, status=404)
+    saved = ""
+    if data.get("behavior") == "allow":
+        entry["reply"] = {"behavior": "allow"}
+        if data.get("always"):
+            info = entry["info"]
+            rule = info["tool_name"]
+            if rule == "Bash":     # regola sul prefisso: Bash(gcc:*)
+                first = str(info["input"].get("command", "")).strip().split(" ")[0]
+                rule = f"Bash({first}:*)" if first else "Bash"
+            try:
+                saved = add_allow_rule(info["cwd"], rule)
+            except Exception as exc:
+                saved = f"(regola non salvata: {exc})"
+    else:
+        entry["reply"] = {"behavior": "deny",
+                          "message": "L'utente ha negato il permesso da ccllrun Studio."}
+    entry["event"].set()
+    return web.json_response({"ok": True, "saved_rule": saved})
+
 
 async def api_claude(request):
     require_csrf(request)
@@ -275,8 +350,17 @@ async def api_claude(request):
         "CLAUDE_CODE_AUTO_COMPACT_WINDOW": str(cfg.get("cc_auto_compact_window", 115000)),
         "CLAUDE_CODE_MAX_OUTPUT_TOKENS": str(cfg.get("cc_max_output_tokens", 32000)),
     })
+    perm_mode = data.get("permission_mode") or "acceptEdits"
     cmd = [CLAUDE_BIN, "-p", "--output-format", "stream-json", "--verbose",
-           "--permission-mode", data.get("permission_mode") or "acceptEdits"]
+           "--permission-mode", perm_mode]
+    # approvazione interattiva: ogni permesso non coperto dalla modalita' passa
+    # dalla card in chat (permtool MCP -> /api/perm/*); inutile in bypass
+    if perm_mode != "bypassPermissions" and (HERE / "permtool.py").is_file():
+        mcp_cfg = json.dumps({"mcpServers": {"studioperm": {
+            "command": sys.executable, "args": [str(HERE / "permtool.py")],
+            "env": {"STUDIO_PORT": str(STUDIO_PORT)}}}})
+        cmd += ["--permission-prompt-tool", "mcp__studioperm__approve",
+                "--mcp-config", mcp_cfg]
     if data.get("session_id"):
         cmd += ["--resume", data["session_id"]]
     for d in add_dirs:
@@ -468,6 +552,9 @@ def main():
     app.router.add_post("/api/stop", api_stop)
     app.router.add_post("/api/launch", api_launch)
     app.router.add_post("/api/claude", api_claude)
+    app.router.add_post("/api/perm/ask", api_perm_ask)
+    app.router.add_get("/api/perm/pending", api_perm_pending)
+    app.router.add_post("/api/perm/reply", api_perm_reply)
     app.router.add_get("/api/commands", api_commands)
     app.router.add_get("/api/config", api_config_get)
     app.router.add_put("/api/config", api_config_put)

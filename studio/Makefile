@@ -16,7 +16,7 @@ PYTHON   ?= $$HOME/.ccllrun/venv/bin/python
 
 all: $(BIN)
 
-$(BIN): native/app.cc native/webview.h native/Info.plist native/AppIcon.icns server.py web/index.html web/icon.svg web/mark.svg ../ccllrun
+$(BIN): native/app.cc native/webview.h native/Info.plist native/AppIcon.icns server.py permtool.py web/index.html web/icon.svg web/mark.svg ../ccllrun
 	@mkdir -p "$(APP)/Contents/MacOS" "$(APP)/Contents/Resources/web"
 	clang++ -x objective-c++ -std=c++17 -O2 \
 	    native/app.cc -o "$(BIN)" \
@@ -24,6 +24,7 @@ $(BIN): native/app.cc native/webview.h native/Info.plist native/AppIcon.icns ser
 	cp native/Info.plist "$(APP)/Contents/Info.plist"
 	cp native/AppIcon.icns "$(APP)/Contents/Resources/AppIcon.icns"
 	cp server.py "$(APP)/Contents/Resources/server.py"
+	cp permtool.py "$(APP)/Contents/Resources/permtool.py"
 	cp web/index.html web/icon.svg web/mark.svg "$(APP)/Contents/Resources/web/"
 	cp ../ccllrun "$(APP)/Contents/Resources/ccllrun"
 	chmod +x "$(APP)/Contents/Resources/ccllrun"
