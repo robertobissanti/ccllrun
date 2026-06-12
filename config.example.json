@@ -1,0 +1,21 @@
+{
+  "big_gguf": "~/.lmstudio/models/unsloth/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf",
+  "small_gguf": "~/.lmstudio/models/ghost-actual/Qwen3.6-9B-Heretic-History-Q4_K_M-GGUF/history-9b-Q4_K_M.gguf",
+  "ctx_big": 98304,
+  "ctx_small": 32768,
+  "batch": 2048,
+  "kv_type": "q8_0",
+  "ngl": 99,
+  "parallel": 1,
+  "reasoning_budget": 4096,
+  "presence_penalty": 1.5,
+  "mmproj": "",
+  "pdf_mode": "hybrid",
+  "proxy_port": 8765,
+  "big_port": 8001,
+  "small_port": 8002,
+  "model_big": "qwen-big",
+  "model_small": "small-fast",
+  "no_small": false,
+  "extra_big_flags": ""
+}

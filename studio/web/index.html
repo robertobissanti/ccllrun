@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ccllrun Studio</title>
+<style>
+  :root {
+    --bg: #262624; --panel: #2f2f2d; --panel2: #393937; --border: #44443f;
+    --side: #20201e; --logbg: #1c1c1a; --logtx: #b8b6ae;
+    --cmd: #8f8ff5;
+    --text: #f0efea; --dim: #9c9a92; --accent: #d97757; --accent2: #e08b6e;
+    --oncolor: #1f140e; --ok: #3fb96a; --warn: #d9a234; --err: #e05252;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #faf9f5; --panel: #ffffff; --panel2: #f0eee6; --border: #ddd9cb;
+      --side: #f0eee6; --logbg: #ffffff; --logtx: #55524a;
+      --cmd: #5b5bd6;
+      --text: #3d3a33; --dim: #8a857a; --accent: #c96442; --accent2: #b55736;
+      --oncolor: #ffffff; --ok: #2e8f52; --warn: #a87b16; --err: #c23d3d;
+    }
+    #box { box-shadow: 0 8px 30px rgba(0,0,0,.08); }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, "SF Pro Text", system-ui, sans-serif;
+         display: flex; height: 100vh; overflow: hidden; }
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 9px;
+           padding: 8px 14px; font: inherit; font-weight: 500; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--oncolor); font-weight: 600; }
+  button.primary:hover { background: var(--accent2); }
+  button.ghost { background: none; border: none; color: var(--dim); padding: 4px 8px; }
+  button.ghost:hover { color: var(--text); }
+  button:disabled { opacity: .5; cursor: default; }
+
+  .brandMark, .dodecaSpinner { width: 28px; height: 28px; color: var(--accent); flex-shrink: 0; }
+  .brandMark polygon, .brandMark path, .dodecaSpinner polygon, .dodecaSpinner path {
+    vector-effect: non-scaling-stroke;
+  }
+  .brandMark .face, .dodecaSpinner .face {
+    fill: color-mix(in srgb, var(--accent) 18%, transparent);
+    stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round;
+  }
+  .brandMark .edge, .dodecaSpinner .edge {
+    fill: none; stroke: currentColor; stroke-width: 1.45; stroke-linecap: round; stroke-linejoin: round;
+    opacity: .82;
+  }
+  .dodecaSpinner {
+    animation: dodecaSpin 2.8s linear infinite;
+    transform-origin: 50% 50%;
+  }
+  /* riempimento sequenziale: 6 facce in vista, una alla volta (slot da 0.4s su ciclo 2.4s) */
+  .dodecaSpinner .face { fill: transparent; animation: dodecaFill 2.4s linear infinite; }
+  .dodecaSpinner .f2 { animation-delay: .4s; }
+  .dodecaSpinner .f3 { animation-delay: .8s; }
+  .dodecaSpinner .f4 { animation-delay: 1.2s; }
+  .dodecaSpinner .f5 { animation-delay: 1.6s; }
+  .dodecaSpinner .f6 { animation-delay: 2.0s; }
+  @keyframes dodecaSpin { to { transform: rotate(360deg); } }
+  @keyframes dodecaFill {
+    0% { fill: transparent; opacity: .62; }
+    4%, 13% { fill: color-mix(in srgb, var(--accent) 72%, transparent); opacity: 1; }
+    16.6%, 100% { fill: transparent; opacity: .62; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dodecaSpinner { animation: none; }
+    .dodecaSpinner .face { animation: none; fill: color-mix(in srgb, var(--accent) 34%, transparent); }
+  }
+
+  /* ---- sidebar ---- */
+  #side { width: 230px; background: var(--side); border-right: 1px solid var(--border);
+          display: flex; flex-direction: column; padding: 14px 10px 10px; flex-shrink: 0; }
+  #logo { font-weight: 700; font-size: 15px; padding: 2px 10px 14px; letter-spacing: .3px; cursor: pointer;
+          display: flex; align-items: center; gap: 9px; }
+  #logo .brandMark { width: 24px; height: 24px; }
+  #logo span { color: var(--accent); }
+  #btnNew { margin: 0 6px 14px; text-align: left; }
+  #side .sect { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .8px; padding: 8px 12px 4px; }
+  #chatList { flex: 1; overflow-y: auto; }
+  .citem { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 8px; color: var(--dim);
+           cursor: pointer; font-size: 13px; }
+  .citem:hover { background: var(--panel); color: var(--text); }
+  .citem.on { background: var(--panel2); color: var(--text); }
+  .citem .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .citem .x { visibility: hidden; color: var(--dim); padding: 0 4px; }
+  .citem:hover .x { visibility: visible; }
+  .nav { display: flex; align-items: center; gap: 9px; padding: 8px 12px; border-radius: 8px;
+         color: var(--dim); cursor: pointer; user-select: none; font-weight: 500; font-size: 13px; }
+  .nav:hover { background: var(--panel); color: var(--text); }
+  .nav.on { background: var(--panel2); color: var(--text); }
+  #side .foot { padding: 10px 12px 2px; font-size: 10.5px; color: var(--dim); }
+  #side .foot a { color: var(--dim); }
+
+  /* ---- main ---- */
+  #main { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+  .page { display: none; flex: 1; }
+  .page.on { display: block; }
+  .pad { padding: 26px 32px; max-width: 1000px; }
+  h1 { font-size: 19px; margin-bottom: 4px; }
+  .sub { color: var(--dim); margin-bottom: 22px; font-size: 13px; }
+  .row { display: flex; gap: 10px; margin: 16px 0; align-items: center; flex-wrap: wrap; }
+
+  /* ---- landing (stile app Claude Code) ---- */
+  #homePage.on { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px; }
+  #hello { font-size: 26px; font-weight: 600; margin-bottom: 6px; display: flex; gap: 12px; align-items: center; }
+  #hello .brandMark { width: 34px; height: 34px; }
+  #helloSub { color: var(--dim); margin-bottom: 26px; font-size: 13.5px; }
+  #box { width: min(720px, 92%); background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+         padding: 14px 16px 12px; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
+  #box:focus-within { border-color: #5a5a54; }
+  #homeInp { width: 100%; background: none; border: none; color: var(--text); font: 15px inherit;
+             outline: none; resize: none; height: 56px; }
+  #homeInp::placeholder { color: var(--dim); }
+  #boxBar { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; background: var(--panel2); border: 1px solid var(--border);
+          border-radius: 20px; padding: 4px 11px; font-size: 12px; color: var(--text); font-family: var(--mono); }
+  .chip .x { cursor: pointer; color: var(--dim); } .chip .x:hover { color: var(--err); }
+  .chip.add { cursor: pointer; color: var(--dim); font-family: inherit; }
+  .chip.add:hover { color: var(--text); border-color: var(--accent); }
+  #boxBar .send { margin-left: auto; }
+  #engineBadge { font-size: 11.5px; color: var(--dim); display: inline-flex; align-items: center; gap: 6px; }
+  #recents { width: min(720px, 92%); margin-top: 30px; }
+  #recents h2 { font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 8px; }
+  .ritem { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 12px; cursor: pointer;
+           border: 1px solid transparent; }
+  .ritem:hover { background: var(--panel); border-color: var(--border); }
+  .ritem .ic { color: var(--dim); }
+  .ritem .name { font-weight: 500; }
+  .ritem .path { color: var(--dim); font-size: 11.5px; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ritem .when { margin-left: auto; color: var(--dim); font-size: 11.5px; flex-shrink: 0; }
+
+  /* ---- chat ---- */
+  #chatPage.on { display: flex; flex-direction: column; height: 100%; }
+  #chatHead { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-bottom: 1px solid var(--border);
+              flex-wrap: wrap; }
+  #chatTitle { font-weight: 600; margin-right: 6px; }
+  #msgs { flex: 1; overflow-y: auto; padding: 18px 24px; max-width: 880px; width: 100%; margin: 0 auto; }
+  .msg { margin: 10px 0; display: flex; }
+  .msg .bub { max-width: 78%; padding: 10px 14px; border-radius: 14px; white-space: pre-wrap; word-break: break-word; }
+  .msg.user { justify-content: flex-end; }
+  .msg.user .bub { background: var(--accent); color: #1f140e; border-bottom-right-radius: 4px; }
+  .msg.bot .bub { background: var(--panel); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+  .msg .think { color: var(--dim); font-size: 12px; border-left: 2px solid var(--border); padding-left: 10px;
+                margin-bottom: 8px; white-space: pre-wrap; }
+  .msg .tools { color: var(--dim); font-size: 11.5px; font-family: var(--mono); }
+  .msg .loading { display: inline-flex; align-items: center; gap: 10px; color: var(--dim); }
+  .msg .loading .dodecaSpinner { width: 26px; height: 26px; }
+  /* indicatore inferenza nel composer: dodecaedro che si riempie finché lo stream è vivo */
+  #busyMark { display: none; align-self: center; line-height: 0; }
+  #busyMark .dodecaSpinner { width: 22px; height: 22px; }
+  /* spinner lineart piccolo per i bottoni (azioni server in corso) */
+  .spinner { display: inline-block; width: 11px; height: 11px; border: 1.5px solid currentColor;
+             border-top-color: transparent; border-radius: 50%; vertical-align: -1px;
+             margin-right: 5px; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  /* markdown renderizzato (opzione config studio_markdown): il fumetto usa
+     pre-wrap per il testo grezzo, qui torniamo a flusso normale */
+  .body.md { white-space: normal; }
+  .body.md > * + * { margin-top: 7px; }
+  .body.md h3, .body.md h4, .body.md h5 { font-size: 14.5px; margin-top: 12px; }
+  .body.md h4, .body.md h5 { font-size: 13.5px; }
+  .body.md ul, .body.md ol { padding-left: 22px; }
+  .body.md li + li { margin-top: 3px; }
+  .body.md code { background: var(--panel2); border: 1px solid var(--border); border-radius: 5px;
+                  padding: 1px 5px; font: 12px var(--mono); }
+  .body.md pre.cb { background: var(--logbg); border: 1px solid var(--border); border-radius: 9px;
+                    padding: 10px 12px; overflow-x: auto; }
+  .body.md pre.cb code { background: none; border: none; padding: 0; font: 12px/1.5 var(--mono);
+                         white-space: pre; color: var(--logtx); }
+  .body.md blockquote { border-left: 3px solid var(--border); padding-left: 10px; color: var(--dim); }
+  .body.md a { color: var(--accent); }
+  .body.md hr { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
+  .body.md table { border-collapse: collapse; font-size: 12.5px; }
+  .body.md th, .body.md td { border: 1px solid var(--border); padding: 4px 9px; text-align: left; }
+  .body.md th { background: var(--panel2); }
+  .content > div + div { margin-top: 7px; }   /* respiro tra blocchi testo/tool intercalati */
+  /* azioni sotto il blocco (stile classico: icona copia con due quadrati) */
+  .msg { flex-direction: column; align-items: flex-start; }
+  .msg.user { align-items: flex-end; }
+  .actions { display: flex; gap: 6px; margin: 3px 4px 0; opacity: 0; transition: opacity .15s; }
+  .msg:hover .actions, .msg:last-child .actions { opacity: 1; }
+  button.cpy { background: none; border: none; color: var(--dim); padding: 3px 6px; border-radius: 7px;
+               display: inline-flex; align-items: center; gap: 5px; font-size: 11px; cursor: pointer; }
+  button.cpy:hover { color: var(--text); background: var(--panel2); }
+  .cpy svg, .copyFloat svg { width: 14px; height: 14px; stroke: currentColor; fill: none;
+                             stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  /* copia flottante per i blocchi lunghi: sticky in alto a destra della parte visibile */
+  .copyFloat { position: sticky; top: 8px; float: right; display: none; margin: -2px -4px 4px 10px;
+               background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+               padding: 5px; cursor: pointer; color: var(--dim); z-index: 3; line-height: 0; }
+  .msg.tall .copyFloat { display: inline-flex; }
+  .copyFloat:hover { color: var(--text); border-color: var(--accent); }
+  #stats { font-size: 11px; color: var(--dim); font-family: var(--mono); padding: 2px 26px; }
+  #composer { padding: 10px 24px 16px; max-width: 880px; width: 100%; margin: 0 auto; }
+  .cbox { display: flex; align-items: flex-end; gap: 6px; background: var(--panel); border: 1px solid var(--border);
+          border-radius: 14px; padding: 8px 8px 8px 14px; position: relative; }
+  #box { position: relative; }
+  .cbox:focus-within { border-color: var(--accent); }
+  .cbox textarea { flex: 1; background: none; border: none; color: var(--text); font: inherit;
+                   resize: none; height: 54px; outline: none; padding: 4px 0; }
+  .cbox textarea::placeholder { color: var(--dim); }
+  /* pulsanti icona lineart: tratto = colore del testo, si invertono col tema */
+  button.icon { width: 34px; height: 34px; padding: 0; border-radius: 50%; flex-shrink: 0;
+                background: none; border: 1.5px solid var(--text); color: var(--text);
+                display: inline-flex; align-items: center; justify-content: center; }
+  button.icon svg { width: 15px; height: 15px; stroke: currentColor; fill: none;
+                    stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  button.icon:hover { border-color: var(--accent); color: var(--accent); }
+  button.icon.stop svg { fill: currentColor; stroke: none; }
+  button.icon:disabled { opacity: .35; }
+  /* menu dei comandi slash (come Claude Code quando digiti /) */
+  .slashMenu { position: absolute; bottom: calc(100% + 8px); left: 0; right: 0; z-index: 6;
+               background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+               max-height: 280px; overflow-y: auto; box-shadow: 0 -6px 24px rgba(0,0,0,.25); }
+  .slashItem { display: flex; gap: 10px; align-items: baseline; padding: 8px 14px; cursor: pointer; }
+  .slashItem.sel, .slashItem:hover { background: var(--panel2); }
+  .slashItem .n { font-family: var(--mono); font-size: 12.5px; color: var(--accent); white-space: nowrap; }
+  .slashItem .n.bn { color: var(--cmd); }   /* comandi nativi di Claude Code */
+  .slashItem .d { color: var(--dim); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis;
+                  white-space: nowrap; flex: 1; }
+  .slashItem .s { color: var(--dim); font-size: 10px; border: 1px solid var(--border);
+                  border-radius: 8px; padding: 0 6px; flex-shrink: 0; }
+
+  /* ---- stato / doctor ---- */
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .card h3 { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .card .detail { color: var(--dim); font-size: 12px; margin-top: 6px; word-break: break-all; font-family: var(--mono); }
+  .card .hint { color: var(--warn); font-size: 12px; margin-top: 8px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.err { background: var(--err); }
+  .srv { display: flex; align-items: baseline; justify-content: space-between; margin-top: 8px; }
+  .srv b { font-family: var(--mono); font-weight: 500; font-size: 12px; }
+  .badge { font-size: 11px; padding: 2px 9px; border-radius: 20px; border: 1px solid var(--border); color: var(--dim); }
+  .badge.up { color: var(--ok); border-color: rgba(63,185,106,.4); }
+  .badge.down { color: var(--err); border-color: rgba(224,82,82,.35); }
+  #startMsg { color: var(--dim); font-size: 12px; font-family: var(--mono); white-space: pre-wrap; }
+
+  /* ---- config / log ---- */
+  #cfgText { width: 100%; height: 420px; background: var(--panel); color: var(--text); border: 1px solid var(--border);
+             border-radius: 12px; padding: 14px; font: 12.5px/1.6 var(--mono); outline: none; resize: vertical; }
+  #cfgText:focus { border-color: var(--accent); }
+  #cfgMsg { font-size: 12px; margin-left: 10px; }
+  /* form di configurazione */
+  .fsect { font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .8px;
+           margin: 22px 0 4px; padding-bottom: 5px; border-bottom: 1px solid var(--border); }
+  .frow { display: flex; align-items: center; gap: 14px; padding: 9px 2px; }
+  .frow .fl { width: 175px; flex-shrink: 0; font-size: 13px; }
+  .frow .fd { color: var(--dim); font-size: 11.5px; flex: 1; min-width: 140px; }
+  .frow input[type=text], .frow input[type=number] {
+    background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px;
+    padding: 7px 10px; font: 12.5px var(--mono); outline: none; }
+  .frow input[type=text] { flex: 2; min-width: 220px; }
+  .frow input[type=number] { width: 90px; }
+  .frow input:focus, .frow select:focus { border-color: var(--accent); }
+  .frow select { min-width: 110px; }
+  .frow input[type=range] { flex: 1; max-width: 280px; accent-color: var(--accent); }
+  .frow .rv { font: 12px var(--mono); color: var(--text); min-width: 58px; text-align: right; }
+  /* switch */
+  .sw { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
+  .sw input { opacity: 0; width: 0; height: 0; }
+  .sw .tk { position: absolute; inset: 0; background: var(--panel2); border: 1px solid var(--border);
+            border-radius: 22px; cursor: pointer; transition: background .15s; }
+  .sw .tk::before { content: ""; position: absolute; width: 16px; height: 16px; border-radius: 50%;
+            left: 2px; top: 2px; background: var(--dim); transition: transform .15s, background .15s; }
+  .sw input:checked + .tk { background: var(--accent); border-color: var(--accent); }
+  .sw input:checked + .tk::before { transform: translateX(16px); background: var(--oncolor); }
+  select { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 9px;
+           padding: 8px 12px; font: inherit; }
+  #logBox { background: var(--logbg); border: 1px solid var(--border); border-radius: 12px; padding: 14px;
+            font: 11.5px/1.55 var(--mono); white-space: pre-wrap; word-break: break-all; height: calc(100vh - 240px);
+            overflow-y: auto; color: var(--logtx); }
+  label.chk { color: var(--dim); font-size: 12.5px; user-select: none; }
+</style>
+</head>
+<body>
+
+<nav id="side">
+  <div id="logo" onclick="go('home')"><span class="brandMount" aria-hidden="true"></span><span>ccllrun <span>Studio</span></span></div>
+  <button id="btnNew" onclick="go('home')">＋ Nuova chat</button>
+  <div class="sect">Chat</div>
+  <div id="chatList"></div>
+  <div class="sect" style="margin-top:8px">Sistema</div>
+  <div class="nav" data-p="status" onclick="go('status')"><span>⌂</span> Stato</div>
+  <div class="nav" data-p="config" onclick="go('config')"><span>⚙︎</span> Config</div>
+  <div class="nav" data-p="logs" onclick="go('logs')"><span>≣</span> Log</div>
+  <div class="nav" onclick="location.reload()" title="Ricarica l'interfaccia dal server (la WKWebView non ha ⌘R)"><span>↻</span> Ricarica UI</div>
+  <div class="foot">UI ispirata a <a href="https://github.com/sk8erboi17/DStudio" target="_blank">DStudio</a> di G. Perrotta</div>
+</nav>
+
+<div id="main">
+
+  <!-- ============ HOME (landing stile app Claude Code) ============ -->
+  <div class="page on" id="homePage">
+    <div id="hello"><span class="brandMount" aria-hidden="true"></span> <span id="helloTxt">Bentornato</span></div>
+    <div id="helloSub">Modello locale via llama.cpp — nessun cloud.</div>
+    <div id="box">
+      <textarea id="homeInp" placeholder="Come posso aiutarti oggi?"></textarea>
+      <div id="boxBar">
+        <span class="chip add" id="homeAddDir">📁 Aggiungi progetto…</span>
+        <span id="homeDirs"></span>
+        <span id="engineBadge"><span class="dot err" id="engineDot"></span><span id="engineTxt">engine…</span></span>
+        <button class="icon send" id="homeSend" title="Avvia chat">
+          <svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="recents">
+      <h2>Recenti</h2>
+      <div id="recentList"></div>
+    </div>
+  </div>
+
+  <!-- ============ CHAT ============ -->
+  <div class="page" id="chatPage">
+    <div id="chatHead">
+      <span id="chatTitle"></span>
+      <span id="chatDirs"></span>
+      <span class="chip add" id="chatAddDir">📁 +</span>
+      <span style="margin-left:auto"></span>
+      <button id="btnLaunch">⌁ Apri in Claude Code</button>
+    </div>
+    <div id="msgs"></div>
+    <div id="stats"></div>
+    <div id="composer">
+      <div class="cbox">
+        <textarea id="inp" placeholder="Scrivi…  (Invio per inviare anche durante l'inferenza, Maiusc+Invio a capo)"></textarea>
+        <span id="busyMark" title="Inferenza in corso"></span>
+        <button class="icon stop" id="btnStop" title="Interrompi" style="display:none">
+          <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+        </button>
+        <button class="icon" id="btnSend" title="Invia">
+          <svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ STATO ============ -->
+  <div class="page" id="statusPage"><div class="pad">
+    <h1>Stato</h1>
+    <div class="sub">Stack locale: llama-server (big + small) e proxy Anthropic→OpenAI per Claude Code.</div>
+    <div class="row">
+      <button class="primary" id="btnToggle">▶ Avvia server</button>
+      <button id="btnRestart" title="Ferma e riavvia tutto lo stack">↻ Riavvia</button>
+      <span id="startMsg"></span>
+    </div>
+    <div class="cards" id="srvCards"></div>
+    <h1 style="margin-top:28px">Setup doctor</h1>
+    <div class="sub">Verifica dei requisiti, con il rimedio quando manca qualcosa.</div>
+    <div class="cards" id="docCards"></div>
+  </div></div>
+
+  <!-- ============ CONFIG ============ -->
+  <div class="page" id="configPage"><div class="pad">
+    <div style="display:flex; align-items:baseline; gap:12px">
+      <h1>Config</h1>
+      <span style="flex:1"></span>
+      <button id="btnCfgMode" title="Modifica il file a mano">{ } JSON</button>
+    </div>
+    <div class="sub">~/.ccllrun/config.json — dopo il salvataggio riavvia i server per applicare (Ferma → Avvia).</div>
+    <div id="cfgForm"></div>
+    <textarea id="cfgText" spellcheck="false" style="display:none"></textarea>
+    <div class="row">
+      <button class="primary" id="btnCfgSave">Salva</button>
+      <button id="btnCfgReload">Ricarica</button>
+      <span id="cfgMsg"></span>
+    </div>
+  </div></div>
+
+  <!-- ============ LOG ============ -->
+  <div class="page" id="logsPage"><div class="pad">
+    <h1>Log</h1>
+    <div class="sub">~/.ccllrun/*.log</div>
+    <div class="row">
+      <select id="logSel">
+        <option value="big">llama-big</option>
+        <option value="small">llama-small</option>
+        <option value="proxy">proxy</option>
+      </select>
+      <label class="chk"><input type="checkbox" id="logAuto" checked> aggiorna ogni 3 s</label>
+    </div>
+    <div id="logBox"></div>
+  </div></div>
+
+</div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const HDRS = { "X-Requested-With": "ccllrun-studio" };
+const esc = t => { const d = document.createElement("div"); d.textContent = t; return d.innerHTML; };
+const base = p => p.replace(/\/+$/, "").split("/").pop() || p;
+
+/* ============ marchio dodecaedro ============ */
+/* L'SVG vive in web/mark.svg (file esterno, generato una volta): qui viene solo
+   caricato e montato. Per cambiare il marchio si tocca mark.svg, non la pagina. */
+let DODECA_SVG = "", DODECA_SPINNER = "";
+const markReady = fetch("/mark.svg").then(r => r.text()).then(svg => {
+  svg = svg.trim();
+  DODECA_SVG = svg.replace("<svg ", '<svg class="brandMark" ');
+  DODECA_SPINNER = svg.replace("<svg ", '<svg class="dodecaSpinner" ');
+  document.querySelectorAll(".brandMount").forEach(el => { el.innerHTML = DODECA_SVG; });
+  const busy = $("#busyMark"); if (busy) busy.innerHTML = DODECA_SPINNER;
+}).catch(() => {});
+
+/* ============ stato persistente: sessioni chat ============ */
+/* sessione = { id, title, dirs: [path…], msgs: [{role,content}], ts } — la cartella di
+   progetto vive QUI, dentro la singola chat, non come impostazione globale. */
+let sessions = JSON.parse(localStorage.getItem("sessions") || "[]");
+let current = null;          // id sessione aperta
+let homeDirs = [];           // cartelle scelte nel composer della home
+const save = () => localStorage.setItem("sessions", JSON.stringify(sessions));
+const cur = () => sessions.find(s => s.id === current);
+
+/* ============ navigazione ============ */
+function go(page) {
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("on"));
+  $("#" + page + "Page").classList.add("on");
+  document.querySelectorAll(".nav").forEach(n => n.classList.toggle("on", n.dataset.p === page));
+  if (page !== "chat") { current = null; renderChatList(); }
+  if (page === "home") { renderRecents(); $("#homeInp").focus(); }
+  if (page === "logs") loadLogs();
+  if (page === "config") loadConfig();
+}
+
+/* ============ menu comandi slash (come Claude Code quando digiti /) ============ */
+/* Comandi nativi di Claude Code sensati nel porting headless: /clear è gestito
+   in locale (nuova sessione), gli altri vengono passati a claude -p. */
+const BUILTIN_CMDS = [
+  { name: "/clear", desc: "Nuova conversazione: azzera la sessione e la cronologia di questa chat", src: "claude", builtin: true },
+  { name: "/compact", desc: "Compatta la conversazione per liberare contesto (riassume i turni precedenti)", src: "claude", builtin: true },
+  { name: "/init", desc: "Analizza il progetto e crea CLAUDE.md con le istruzioni", src: "claude", builtin: true },
+  { name: "/review", desc: "Code review delle modifiche correnti", src: "claude", builtin: true },
+  { name: "/security-review", desc: "Review di sicurezza delle modifiche pendenti", src: "claude", builtin: true },
+  { name: "/cost", desc: "Mostra l'uso di token e la durata della sessione", src: "claude", builtin: true },
+  { name: "/context", desc: "Mostra l'uso della context window per categoria (prompt, tool, messaggi…)", src: "claude", builtin: true },
+  { name: "/memory", desc: "Mostra i file di memoria caricati (CLAUDE.md e memoria auto)", src: "claude", builtin: true },
+];
+
+const cmdCache = {};
+async function fetchCommands(cwd) {
+  const key = cwd || "";
+  if (!cmdCache[key]) {
+    try {
+      const j = await (await fetch("/api/commands?cwd=" + encodeURIComponent(key))).json();
+      cmdCache[key] = [...BUILTIN_CMDS, ...(j.commands || [])];
+    } catch { return BUILTIN_CMDS; }
+  }
+  return cmdCache[key];
+}
+
+/* Aggancia il menu a una textarea: si apre quando il testo è "/qualcosa",
+   frecce per muoversi, Tab/Invio per scegliere, Esc per chiudere.
+   Mentre è aperto, ta.dataset.slashOpen="1" → i gestori di invio non inviano. */
+function attachSlash(ta, getCwd) {
+  const wrap = ta.closest(".cbox") || ta.closest("#box");
+  const menu = document.createElement("div");
+  menu.className = "slashMenu"; menu.style.display = "none";
+  wrap.appendChild(menu);
+  let items = [], sel = 0;
+  const close = () => { menu.style.display = "none"; delete ta.dataset.slashOpen; };
+  const render = () => {
+    menu.innerHTML = items.map((c, i) => `
+      <div class="slashItem ${i === sel ? "sel" : ""}" data-i="${i}">
+        <span class="n${c.builtin ? " bn" : ""}">${esc(c.name)}</span><span class="d">${esc(c.desc)}</span>
+        <span class="s">${esc(c.src)}</span>
+      </div>`).join("");
+    menu.querySelectorAll(".slashItem").forEach(el => {
+      el.onmousedown = e => { e.preventDefault(); sel = +el.dataset.i; apply(); };
+    });
+    menu.querySelector(".sel")?.scrollIntoView({ block: "nearest" });
+  };
+  const apply = () => { ta.value = items[sel].name + " "; close(); ta.focus(); };
+  ta.addEventListener("input", async () => {
+    const m = ta.value.match(/^\/(\S*)$/);          // solo la prima parola, che inizia per /
+    if (!m) return close();
+    const all = await fetchCommands(getCwd());
+    const q = m[1].toLowerCase();
+    items = all.filter(c => c.name.toLowerCase().includes(q) || c.desc.toLowerCase().includes(q)).slice(0, 12);
+    sel = 0;
+    if (!items.length) return close();
+    ta.dataset.slashOpen = "1"; menu.style.display = ""; render();
+  });
+  ta.addEventListener("keydown", e => {
+    if (ta.dataset.slashOpen !== "1") return;
+    if (e.key === "ArrowDown") { sel = (sel + 1) % items.length; render(); e.preventDefault(); }
+    else if (e.key === "ArrowUp") { sel = (sel - 1 + items.length) % items.length; render(); e.preventDefault(); }
+    else if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); apply(); }
+    else if (e.key === "Escape") { close(); }
+  });
+  ta.addEventListener("blur", () => setTimeout(close, 150));
+}
+
+/* ============ scelta cartelle (picker nativo nella .app, prompt nel browser) ============ */
+async function pickDir() {
+  if (window.ds4PickDirectory) return await window.ds4PickDirectory();
+  return prompt("Percorso della cartella di progetto:") || "";
+}
+
+function chipHtml(dirs, removable) {
+  return dirs.map((d, i) =>
+    `<span class="chip" title="${esc(d)}">📁 ${esc(base(d))}${removable ? ` <span class="x" data-i="${i}">✕</span>` : ""}</span>`
+  ).join(" ");
+}
+
+/* ============ HOME ============ */
+function renderHomeDirs() {
+  $("#homeDirs").innerHTML = chipHtml(homeDirs, true);
+  $("#homeDirs").querySelectorAll(".x").forEach(x =>
+    x.onclick = () => { homeDirs.splice(+x.dataset.i, 1); renderHomeDirs(); });
+}
+$("#homeAddDir").onclick = async () => {
+  const d = await pickDir();
+  if (d && !homeDirs.includes(d)) { homeDirs.push(d); renderHomeDirs(); }
+};
+$("#homeSend").onclick = startChat;
+$("#homeInp").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey && e.target.dataset.slashOpen !== "1") { e.preventDefault(); startChat(); }
+});
+
+function startChat() {
+  const text = $("#homeInp").value.trim();
+  if (!text && !homeDirs.length) return;
+  const s = { id: Date.now().toString(36), title: text ? text.slice(0, 42) : base(homeDirs[0] || "chat"),
+              dirs: [...homeDirs], msgs: [], ts: Date.now() };
+  sessions.unshift(s); save();
+  $("#homeInp").value = ""; homeDirs = []; renderHomeDirs();
+  openChat(s.id);
+  if (text) sendMessage(text);
+}
+
+function renderRecents() {
+  const ago = ts => { const m = (Date.now() - ts) / 60000;
+    return m < 60 ? Math.max(1, m | 0) + " min fa" : m < 1440 ? (m / 60 | 0) + " h fa" : (m / 1440 | 0) + " g fa"; };
+  $("#recentList").innerHTML = sessions.slice(0, 8).map(s => `
+    <div class="ritem" data-id="${s.id}">
+      <span class="ic">${s.dirs.length ? "📁" : "💬"}</span>
+      <span><div class="name">${esc(s.title)}</div>
+        ${s.dirs.length ? `<div class="path">${esc(s.dirs.join("  ·  "))}</div>` : ""}</span>
+      <span class="when">${ago(s.ts)}</span>
+    </div>`).join("") || `<div class="sub">Nessuna chat ancora — inizia qui sopra.</div>`;
+  $("#recentList").querySelectorAll(".ritem").forEach(r => r.onclick = () => openChat(r.dataset.id));
+}
+
+/* ============ sidebar: elenco chat ============ */
+function renderChatList() {
+  $("#chatList").innerHTML = sessions.map(s => `
+    <div class="citem ${s.id === current ? "on" : ""}" data-id="${s.id}">
+      <span class="t">${esc(s.title)}</span><span class="x" data-id="${s.id}">✕</span>
+    </div>`).join("");
+  $("#chatList").querySelectorAll(".citem").forEach(c => c.onclick = e => {
+    if (e.target.classList.contains("x")) {
+      sessions = sessions.filter(s => s.id !== c.dataset.id); save();
+      if (current === c.dataset.id) go("home"); else renderChatList();
+      return;
+    }
+    openChat(c.dataset.id);
+  });
+}
+
+/* ============ CHAT ============ */
+function openChat(id) {
+  current = id;
+  const s = cur(); if (!s) return go("home");
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("on"));
+  $("#chatPage").classList.add("on");
+  document.querySelectorAll(".nav").forEach(n => n.classList.remove("on"));
+  $("#chatTitle").textContent = s.title;
+  renderChatDirs(); renderChatList();
+  $("#msgs").innerHTML = "";
+  s.msgs.forEach(m => {
+    if (m.role !== "user" && m.role !== "assistant") return;
+    if (!m.content && !m.transcript?.length) return;
+    renderInto(addMsg(m.role === "user" ? "user" : "bot"), m);
+  });
+  // se in questa chat c'è un'inferenza in corso, riaggancia il suo fumetto vivo
+  if (activeTurn && activeTurn.sid === id) $("#msgs").appendChild(activeTurn.div);
+  refreshTall();
+  $("#msgs").scrollTop = $("#msgs").scrollHeight;
+  $("#inp").focus();
+}
+
+function renderChatDirs() {
+  const s = cur(); if (!s) return;
+  $("#chatDirs").innerHTML = chipHtml(s.dirs, true);
+  $("#chatDirs").querySelectorAll(".x").forEach(x =>
+    x.onclick = () => { s.dirs.splice(+x.dataset.i, 1); save(); renderChatDirs(); });
+  $("#btnLaunch").style.display = s.dirs.length ? "" : "none";
+}
+$("#chatAddDir").onclick = async () => {
+  const s = cur(); if (!s) return;
+  const d = await pickDir();
+  if (d && !s.dirs.includes(d)) { s.dirs.push(d); save(); renderChatDirs(); }
+};
+
+/* Apri Claude Code nel Terminale: prima cartella = cwd, le altre via --add-dir */
+$("#btnLaunch").onclick = async () => {
+  const s = cur(); if (!s || !s.dirs.length) return;
+  $("#btnLaunch").disabled = true;
+  try {
+    const r = await fetch("/api/launch", { method: "POST",
+      headers: { "Content-Type": "application/json", ...HDRS },
+      body: JSON.stringify({ cwd: s.dirs[0], add_dirs: s.dirs.slice(1) }) });
+    const j = await r.json();
+    $("#stats").textContent = j.ok ? "Claude Code aperto nel Terminale in " + s.dirs[0] : "⚠️ " + (j.error || j.output);
+  } catch (e) { $("#stats").textContent = "⚠️ " + e; }
+  $("#btnLaunch").disabled = false;
+};
+
+/* icona "copia" classica: due quadrati sovrapposti */
+const COPY_SVG = `<svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V7a2 2 0 0 1 2-2h8"/></svg>`;
+
+async function copyToClipboard(text) {
+  try { await navigator.clipboard.writeText(text); }
+  catch {  // fallback (es. accesso via LAN, dove la Clipboard API è bloccata)
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    document.execCommand("copy"); ta.remove();
+  }
+}
+
+/* ============ markdown minimale (opzione config studio_markdown) ============ */
+const mdOn = () => lastStatus?.config?.studio_markdown !== false;
+
+function mdToHtml(src) {
+  // 1) metti in salvo i blocchi ``` prima di ogni altra trasformazione
+  const codes = [];
+  src = src.replace(/```\w*\n?([\s\S]*?)```/g, (_, code) => {
+    codes.push(`<pre class="cb"><code>${esc(code.replace(/\n$/, ""))}</code></pre>`);
+    return "" + (codes.length - 1) + "";
+  });
+  const inline = t => esc(t)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+    .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,;:!?]|$)/g, "$1<i>$2</i>")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  // 2) riga per riga: titoli, liste, citazioni, tabelle, hr, paragrafi
+  let html = "", list = null, para = [], tbl = null;
+  const flushPara = () => { if (para.length) { html += `<p>${para.map(inline).join("<br>")}</p>`; para = []; } };
+  const closeList = () => { if (list) { html += `</${list}>`; list = null; } };
+  const closeTbl = () => { if (tbl) { html += "</table>"; tbl = null; } };
+  const flush = () => { flushPara(); closeList(); closeTbl(); };
+  for (const ln of src.split("\n")) {
+    let m;
+    if ((m = ln.match(/^(\d+)\s*$/))) { flush(); html += codes[+m[1]]; }
+    else if ((m = ln.match(/^(#{1,5})\s+(.*)/))) { flush(); const h = Math.min(m[1].length + 2, 5); html += `<h${h}>${inline(m[2])}</h${h}>`; }
+    else if (/^\s*([-*_])\s*\1\s*\1[\s\-*_]*$/.test(ln)) { flush(); html += "<hr>"; }
+    else if ((m = ln.match(/^\s*[-*+]\s+(.*)/))) { flushPara(); closeTbl(); if (list !== "ul") { closeList(); html += "<ul>"; list = "ul"; } html += `<li>${inline(m[1])}</li>`; }
+    else if ((m = ln.match(/^\s*\d+[.)]\s+(.*)/))) { flushPara(); closeTbl(); if (list !== "ol") { closeList(); html += "<ol>"; list = "ol"; } html += `<li>${inline(m[1])}</li>`; }
+    else if ((m = ln.match(/^>\s?(.*)/))) { flush(); html += `<blockquote>${inline(m[1])}</blockquote>`; }
+    else if (/^\s*\|.*\|\s*$/.test(ln)) {
+      if (/^\s*\|[\s:|-]+\|\s*$/.test(ln)) continue;          // riga separatrice |---|---|
+      flushPara(); closeList();
+      const cells = ln.trim().replace(/^\||\|$/g, "").split("|").map(c => inline(c.trim()));
+      const tag = tbl ? "td" : "th";
+      if (!tbl) { html += "<table>"; tbl = true; }
+      html += "<tr>" + cells.map(c => `<${tag}>${c}</${tag}>`).join("") + "</tr>";
+    }
+    else if (!ln.trim()) flush();
+    else { closeList(); closeTbl(); para.push(ln); }
+  }
+  flush();
+  // 3) i placeholder rimasti in mezzo a un paragrafo
+  return html.replace(/(\d+)/g, (_, i) => codes[+i]);
+}
+
+/* crea un blocco .body: markdown se l'opzione è attiva, testo grezzo altrimenti.
+   Il sorgente resta in dataset.raw così la copia restituisce il markdown originale. */
+function bodyEl(txt) {
+  const el = document.createElement("div");
+  el.dataset.raw = txt;
+  if (mdOn()) { el.className = "body md"; el.innerHTML = mdToHtml(txt); }
+  else { el.className = "body"; el.textContent = txt; }
+  return el;
+}
+
+function createMsg(role) {
+  const div = document.createElement("div");
+  div.className = "msg " + (role === "user" ? "user" : "bot");
+  div.innerHTML =
+    `<div class="bub"><span class="copyFloat" title="Copia">${COPY_SVG}</span><div class="content"></div></div>
+     <div class="actions"><button class="cpy" title="Copia">${COPY_SVG}<span>copia</span></button></div>`;
+  const content = div.querySelector(".content");
+  const doCopy = async el => {
+    // copia solo il testo della risposta (senza le righe 🔧 dei tool);
+    // dataset.raw = markdown originale quando il blocco è renderizzato
+    const parts = [...content.querySelectorAll(".body")].map(b => b.dataset.raw ?? b.innerText).join("\n\n");
+    await copyToClipboard(parts || content.innerText);
+    const label = el.querySelector("span:last-child");
+    if (label) { label.textContent = "copiato ✓"; setTimeout(() => { label.textContent = "copia"; }, 1200); }
+    else { el.style.color = "var(--ok)"; setTimeout(() => { el.style.color = ""; }, 1200); }
+  };
+  const btn = div.querySelector(".cpy");
+  btn.onclick = () => doCopy(btn);
+  const float = div.querySelector(".copyFloat");
+  float.onclick = () => doCopy(float);
+  return { div, content };
+}
+
+function addMsg(role) {
+  const m = createMsg(role);
+  $("#msgs").appendChild(m.div);
+  return m.content;
+}
+
+/* rendering di un messaggio salvato: il transcript intercala testo e tool
+   nell'ordine reale in cui Claude Code li ha prodotti */
+function renderInto(content, m) {
+  if (m.transcript?.length) {
+    for (const b of m.transcript) {
+      if (b.t === "tool") {
+        const el = document.createElement("div");
+        el.className = "tools"; el.textContent = b.v;
+        content.appendChild(el);
+      } else {
+        content.appendChild(m.role === "user" ? Object.assign(document.createElement("div"), { className: "body", textContent: b.v }) : bodyEl(b.v));
+      }
+    }
+  } else if (m.role === "user") {
+    content.textContent = m.content;
+  } else {
+    content.appendChild(bodyEl(m.content));
+  }
+}
+
+/* mostra la copia flottante solo sui blocchi più alti dell'area visibile */
+function refreshTall() {
+  const limit = Math.max(300, $("#msgs").clientHeight * 0.7);
+  document.querySelectorAll("#msgs .msg").forEach(m => {
+    const bub = m.querySelector(".bub");
+    m.classList.toggle("tall", bub && bub.offsetHeight > limit);
+  });
+}
+
+/* La chat è un wrapper di Claude Code: ogni invio esegue `claude -p` (headless,
+   stream-json) nella cartella della sessione, via /api/claude. La conversazione
+   prosegue lato Claude Code con --resume (session_id salvato nella sessione). */
+
+function summarizeToolUse(name, input) {
+  const i = input || {};
+  const arg = i.file_path || i.path || i.pattern || i.command || i.query || i.url || "";
+  return "🔧 " + name + (arg ? "(" + String(arg).split("/").slice(-2).join("/").slice(0, 60) + ")" : "");
+}
+
+/* Invio sempre possibile (come in Claude Code: i messaggi inviati durante
+   l'inferenza vanno in coda e partono al turno successivo); lo stop appare
+   solo durante lo streaming e uccide il processo claude di quel turno. */
+let streaming = false, aborter = null;
+const queue = [];
+
+function updateComposer() {
+  $("#btnStop").style.display = streaming ? "" : "none";
+  // dodecaedro che si riempie: visibile per tutta la durata dell'inferenza
+  const busy = $("#busyMark");
+  if (!busy.innerHTML && DODECA_SPINNER) busy.innerHTML = DODECA_SPINNER;
+  busy.style.display = streaming ? "inline-flex" : "none";
+}
+$("#btnStop").onclick = () => { queue.length = 0; aborter?.abort(); };  // ferma il turno e svuota la coda
+
+function sendMessage(forcedText) {
+  const s = cur(); if (!s) return;
+  const text = forcedText || $("#inp").value.trim();
+  if (!text) return;
+  if (text === "/clear") {            // gestito in locale: nuova sessione Claude Code
+    s.claudeSid = null; s.msgs = []; save();
+    $("#inp").value = ""; $("#msgs").innerHTML = "";
+    $("#stats").textContent = "conversazione azzerata — la prossima richiesta parte da zero";
+    return;
+  }
+  if (!lastStatus?.servers?.proxy?.up) { alert("Lo stack è fermo: avvialo da Sistema → Stato (la chat è Claude Code sul modello locale)."); return; }
+  if (!forcedText) $("#inp").value = "";
+  addMsg("user").textContent = text;
+  s.msgs.push({ role: "user", content: text }); s.ts = Date.now(); save();
+  $("#msgs").scrollTop = $("#msgs").scrollHeight;
+  queue.push({ s, text });          // la coda ricorda a quale chat appartiene il messaggio
+  if (!streaming) processQueue();
+}
+
+async function processQueue() {
+  streaming = true; updateComposer();
+  while (queue.length) {
+    const { s, text } = queue.shift();
+    await runTurn(s, text);
+  }
+  streaming = false; updateComposer();
+}
+
+/* Il turno NON dipende dalla pagina visibile: il fumetto vive in activeTurn e
+   openChat lo riaggancia se torni nella chat; se sei altrove, lo streaming
+   continua e il risultato finisce comunque in s.msgs. */
+let activeTurn = null;
+
+async function runTurn(s, text) {
+  const { div, content } = createMsg("bot");
+  if (cur() === s) $("#msgs").appendChild(div);
+  activeTurn = { sid: s.id, div };
+  const transcript = [];
+  let pending = document.createElement("div");
+  pending.className = "body loading";
+  pending.innerHTML = DODECA_SPINNER + "<span>elaborazione…</span>";
+  content.appendChild(pending);
+  const addBlock = (cls, txt) => {
+    if (pending) { pending.remove(); pending = null; }
+    if (cls === "body") { content.appendChild(bodyEl(txt)); return; }
+    const el = document.createElement("div");
+    el.className = cls; el.textContent = txt;
+    content.appendChild(el);
+  };
+  const here = () => cur() === s;     // la chat di questo turno è quella visibile?
+  aborter = new AbortController();
+  const t0 = performance.now(); let answer = "";
+
+  try {
+    const r = await fetch("/api/claude", { method: "POST",
+      headers: { "Content-Type": "application/json", ...HDRS },
+      signal: aborter.signal,
+      body: JSON.stringify({ prompt: text, cwd: s.dirs[0] || null,
+                             add_dirs: s.dirs.slice(1), session_id: s.claudeSid || null }) });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "HTTP " + r.status);
+    const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+        if (!line) continue;
+        let ev; try { ev = JSON.parse(line); } catch { continue; }
+        if (ev.type === "system" && ev.subtype === "init") {
+          s.claudeSid = ev.session_id; save();
+        } else if (ev.type === "assistant") {
+          // tutto ciò che Claude Code scrive, nell'ordine in cui lo scrive:
+          // testo e tool intercalati come nella TUI
+          for (const block of ev.message?.content || []) {
+            if (block.type === "text" && block.text) {
+              answer += (answer ? "\n\n" : "") + block.text;
+              transcript.push({ t: "text", v: block.text });
+              addBlock("body", block.text);
+            } else if (block.type === "tool_use") {
+              const sum = summarizeToolUse(block.name, block.input);
+              transcript.push({ t: "tool", v: sum });
+              addBlock("tools", sum);
+            }
+          }
+        } else if (ev.type === "result") {
+          if (ev.is_error && ev.result && !answer) {
+            answer = "⚠️ " + ev.result;
+            transcript.push({ t: "text", v: answer });
+            addBlock("body", answer);
+          }
+          if (here()) {
+            const secs = ((ev.duration_ms || (performance.now() - t0)) / 1000).toFixed(1);
+            $("#stats").textContent = `${ev.num_turns ?? "?"} turni · ${secs} s`;
+          }
+        } else if (ev.type === "studio_error") {
+          throw new Error(ev.error);
+        }
+        if (here()) { refreshTall(); $("#msgs").scrollTop = $("#msgs").scrollHeight; }
+      }
+    }
+    if (!answer && !transcript.length) {
+      answer = "(nessuna risposta)";
+      transcript.push({ t: "text", v: answer });
+      addBlock("body", answer);
+    }
+    s.msgs.push({ role: "assistant", content: answer, transcript }); save();
+  } catch (e) {
+    const msg = e.name === "AbortError" ? "⏹ interrotto" : "⚠️ " + e.message;
+    transcript.push({ t: "text", v: msg });
+    addBlock("body", msg);
+    if (e.name === "AbortError" || transcript.length > 1) {
+      s.msgs.push({ role: "assistant",
+                    content: answer ? answer + "\n\n" + msg : msg, transcript }); save();
+    }
+  }
+  if (pending) pending.remove();
+  activeTurn = null; aborter = null;
+  if (here()) refreshTall();
+}
+$("#btnSend").onclick = () => sendMessage();
+$("#inp").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey && e.target.dataset.slashOpen !== "1") { e.preventDefault(); sendMessage(); }
+});
+
+/* ============ STATO ============ */
+let lastStatus = null;
+async function refreshStatus() {
+  try { lastStatus = await (await fetch("/api/status")).json(); } catch (e) { return; }
+  const { servers: s, doctor, config } = lastStatus;
+  $("#engineDot").className = "dot " + (s.big.up ? "ok" : "err");
+  $("#engineTxt").textContent = s.big.up
+    ? `${config.model_big} · ctx ${s.big.ctx ? Math.round(s.big.ctx / 1024) + "k" : "?"}`
+    : "engine fermo — Stato ▶";
+  const fmtCtx = c => c ? (c >= 1024 ? Math.round(c / 1024) + "k" : c) : "—";
+  $("#srvCards").innerHTML = `
+    <div class="card"><h3><span class="dot ${s.big.up ? "ok" : "err"}"></span> Modello big
+        <span class="badge ${s.big.up ? "up" : "down"}" style="margin-left:auto">${s.big.up ? "attivo" : "fermo"}</span></h3>
+      <div class="srv"><b>${esc(s.big.alias || "")}</b><span class="badge">:${s.big.port}</span></div>
+      <div class="detail">${esc((s.big.model_path || "").split("/").pop() || "")}</div>
+      <div class="detail">contesto ${fmtCtx(s.big.ctx)}${s.big.pid ? " · pid " + s.big.pid : ""}</div></div>
+    <div class="card"><h3><span class="dot ${s.small.up ? "ok" : "err"}"></span> Modello small
+        <span class="badge ${s.small.up ? "up" : "down"}" style="margin-left:auto">${s.small.up ? "attivo" : "fermo"}</span></h3>
+      <div class="srv"><b>${esc(s.small.alias || "")}</b><span class="badge">:${s.small.port}</span></div>
+      <div class="detail">${s.small.pid ? "pid " + s.small.pid : config.no_small ? "disattivato (no_small)" : ""}</div></div>
+    <div class="card"><h3><span class="dot ${s.proxy.up ? "ok" : "err"}"></span> Proxy Anthropic
+        <span class="badge ${s.proxy.up ? "up" : "down"}" style="margin-left:auto">${s.proxy.up ? "attivo" : "fermo"}</span></h3>
+      <div class="srv"><b>ANTHROPIC_BASE_URL</b><span class="badge">:${s.proxy.port}</span></div>
+      <div class="detail">${s.proxy.pid ? "pid " + s.proxy.pid : ""}</div></div>`;
+  $("#docCards").innerHTML = doctor.map(d => `
+    <div class="card"><h3><span class="dot ${d.ok ? "ok" : d.warn ? "warn" : "err"}"></span> ${esc(d.label)}</h3>
+      <div class="detail">${esc(d.detail)}</div>
+      ${d.hint ? `<div class="hint">→ ${esc(d.hint)}</div>` : ""}</div>`).join("");
+  renderSrvButtons();
+}
+refreshStatus(); setInterval(refreshStatus, 4000);
+
+/* Un solo toggle Avvia/Ferma (autoescludente, bloccato mentre l'azione è in
+   corso) + Riavvia che fa stop e start in sequenza. Lo stato vero arriva da
+   /api/status: il label segue lastStatus, non un flag locale. */
+let srvBusy = false;
+const stackUp = () => !!(lastStatus?.servers?.proxy?.up || lastStatus?.servers?.big?.up);
+function renderSrvButtons() {
+  const t = $("#btnToggle");
+  t.disabled = $("#btnRestart").disabled = srvBusy;
+  if (srvBusy) return;                       // durante l'azione il label resta spinner + "…"
+  t.textContent = stackUp() ? "■ Ferma server" : "▶ Avvia server";
+  t.classList.toggle("primary", !stackUp());
+}
+async function srvRun(busyLabel, apis) {
+  if (srvBusy) return;
+  srvBusy = true; renderSrvButtons();
+  $("#btnToggle").innerHTML = `<span class="spinner"></span>${esc(busyLabel)}`;
+  try {
+    for (const a of apis) {
+      const j = await (await fetch("/api/" + a, { method: "POST", headers: HDRS })).json();
+      $("#startMsg").textContent = (j.output || "").trim() || (j.ok ? "fatto" : "errore");
+      if (!j.ok) break;
+    }
+  } catch (e) { $("#startMsg").textContent = "errore: " + e; }
+  await refreshStatus();
+  srvBusy = false; renderSrvButtons();
+}
+$("#btnToggle").onclick = () => {
+  if (stackUp()) return srvRun("arresto…", ["stop"]);
+  $("#startMsg").textContent = "avvio in corso (il big può richiedere 1–2 min)…";
+  srvRun("avvio…", ["start"]);
+};
+$("#btnRestart").onclick = () => {
+  $("#startMsg").textContent = "riavvio in corso…";
+  srvRun("riavvio…", ["stop", "start"]);
+};
+
+/* ============ CONFIG ============ */
+/* Schema dei parametri di ccllrun: tipo di controllo, range e spiegazioni.
+   I default rispecchiano quelli dello script. */
+const fmtK = v => v >= 1024 ? Math.round(v / 1024) + "k" : v;
+const CFG_SCHEMA = [
+  { sect: "Modelli" },
+  { k: "big_gguf", t: "text", l: "GGUF big", d: "path del modello principale", def: "" },
+  { k: "small_gguf", t: "text", l: "GGUF small", d: "modello rapido (vuoto = nessuno)", def: "" },
+  { k: "no_small", t: "switch", l: "Disattiva small", d: "non avviare il modello piccolo", def: false },
+  { k: "model_big", t: "text", l: "Alias big", d: "nome esposto dall'API", def: "qwen-big" },
+  { k: "model_small", t: "text", l: "Alias small", d: "", def: "small-fast" },
+  { sect: "Contesto e memoria" },
+  { k: "ctx_big", t: "range", min: 8192, max: 262144, step: 4096, l: "Contesto big",
+    d: "totale: viene diviso per gli slot paralleli", def: 98304, fmt: fmtK },
+  { k: "ctx_small", t: "range", min: 4096, max: 65536, step: 4096, l: "Contesto small", d: "", def: 32768, fmt: fmtK },
+  { k: "kv_type", t: "select", opts: ["q8_0", "f16", "q4_0"], l: "KV cache",
+    d: "q8_0 = metà memoria con perdita trascurabile", def: "q8_0" },
+  { k: "ngl", t: "range", min: 0, max: 99, step: 1, l: "Layer su GPU", d: "99 = tutti (consigliato su Apple Silicon)", def: 99 },
+  { sect: "Inferenza" },
+  { k: "parallel", t: "range", min: 1, max: 4, step: 1, l: "Slot paralleli",
+    d: "attenzione: >1 divide il contesto per slot", def: 1 },
+  { k: "batch", t: "select", opts: [512, 1024, 2048, 4096], l: "Batch size", d: "-b / -ub di llama-server", def: 2048 },
+  { k: "reasoning_budget", t: "range", min: 0, max: 16384, step: 512, l: "Budget reasoning",
+    d: "token massimi di ragionamento", def: 4096, fmt: fmtK },
+  { k: "presence_penalty", t: "range", min: 0, max: 2, step: 0.1, l: "Presence penalty",
+    d: "alto = meno ripetizioni ma codice peggiore", def: 1.5 },
+  { sect: "PDF e visione" },
+  { k: "pdf_mode", t: "select", opts: ["hybrid", "text", "image"], l: "Modalità PDF",
+    d: "hybrid: testo se basta, altrimenti immagini", def: "hybrid" },
+  { k: "mmproj", t: "text", l: "mmproj (visione)", d: 'vuoto = autodetect, "off" = visione disattivata', def: "" },
+  { sect: "Rete e avanzate" },
+  { k: "proxy_port", t: "num", l: "Porta proxy", d: "", def: 8765 },
+  { k: "big_port", t: "num", l: "Porta big", d: "", def: 8001 },
+  { k: "small_port", t: "num", l: "Porta small", d: "", def: 8002 },
+  { k: "llama_bin", t: "text", l: "Binario llama-server", d: "", def: "llama-server" },
+  { k: "extra_big_flags", t: "text", l: "Flag extra (big)", d: "passati così come sono, es. --mlock --kv-unified", def: "" },
+  { sect: "Studio" },
+  { k: "studio_markdown", t: "switch", l: "Markdown in chat",
+    d: "renderizza le risposte come markdown (titoli, liste, codice, tabelle); spento = testo grezzo", def: true },
+];
+
+let cfgJsonMode = false;
+
+function renderCfgForm(cfg) {
+  $("#cfgForm").innerHTML = CFG_SCHEMA.map(f => {
+    if (f.sect) return `<div class="fsect">${esc(f.sect)}</div>`;
+    const v = cfg[f.k] ?? f.def;
+    const id = "cf_" + f.k;
+    let ctl = "";
+    if (f.t === "text") ctl = `<input type="text" id="${id}" value="${esc(String(v))}">`;
+    else if (f.t === "num") ctl = `<input type="number" id="${id}" value="${esc(String(v))}">`;
+    else if (f.t === "switch")
+      ctl = `<label class="sw"><input type="checkbox" id="${id}" ${v ? "checked" : ""}><span class="tk"></span></label>`;
+    else if (f.t === "select")
+      ctl = `<select id="${id}">${f.opts.map(o => `<option ${String(o) === String(v) ? "selected" : ""}>${o}</option>`).join("")}</select>`;
+    else if (f.t === "range") {
+      const fmt = f.fmt || (x => x);
+      ctl = `<input type="range" id="${id}" min="${f.min}" max="${f.max}" step="${f.step}" value="${v}">
+             <span class="rv">${fmt(v)}</span>`;
+    }
+    return `<div class="frow"><span class="fl">${esc(f.l)}</span>${ctl}<span class="fd">${esc(f.d || "")}</span></div>`;
+  }).join("");
+  // gli slider aggiornano il valore mostrato accanto
+  for (const f of CFG_SCHEMA) {
+    if (f.sect || f.t !== "range") continue;
+    const el = $("#cf_" + f.k);
+    const fmt = f.fmt || (x => x);
+    el.addEventListener("input", () => { el.nextElementSibling.textContent = fmt(Number(el.value)); });
+  }
+}
+
+function collectCfgForm() {
+  const out = {};
+  for (const f of CFG_SCHEMA) {
+    if (f.sect) continue;
+    const el = $("#cf_" + f.k);
+    if (!el) continue;
+    if (f.t === "switch") out[f.k] = el.checked;
+    else if (f.t === "num" || f.t === "range") out[f.k] = Number(el.value);
+    else if (f.t === "select") out[f.k] = isNaN(f.opts[0]) ? el.value : Number(el.value);
+    else out[f.k] = el.value.trim();
+  }
+  return out;
+}
+
+function setCfgMode(json) {
+  if (json && !cfgJsonMode) {        // form → JSON: serializza lo stato corrente
+    $("#cfgText").value = JSON.stringify(collectCfgForm(), null, 2) + "\n";
+  } else if (!json && cfgJsonMode) { // JSON → form: riparsa (se invalido resta in JSON)
+    try { renderCfgForm(JSON.parse($("#cfgText").value)); }
+    catch (e) {
+      $("#cfgMsg").textContent = "JSON non valido: " + e.message;
+      $("#cfgMsg").style.color = "var(--err)";
+      return;
+    }
+  }
+  cfgJsonMode = json;
+  $("#cfgForm").style.display = json ? "none" : "";
+  $("#cfgText").style.display = json ? "" : "none";
+  $("#btnCfgMode").textContent = json ? "⊞ Form" : "{ } JSON";
+}
+$("#btnCfgMode").onclick = () => setCfgMode(!cfgJsonMode);
+
+async function loadConfig() {
+  const j = await (await fetch("/api/config")).json();
+  $("#cfgText").value = j.text;
+  let cfg = {};
+  try { cfg = JSON.parse(j.text); } catch {}
+  renderCfgForm(cfg);
+  $("#cfgMsg").textContent = j.missing ? "config.json non esiste ancora: salvando lo crei." : "";
+  $("#cfgMsg").style.color = "var(--dim)";
+}
+$("#btnCfgReload").onclick = loadConfig;
+$("#btnCfgSave").onclick = async () => {
+  let body;
+  if (cfgJsonMode) {
+    try { JSON.parse($("#cfgText").value); }
+    catch (e) { $("#cfgMsg").textContent = "JSON non valido: " + e.message; $("#cfgMsg").style.color = "var(--err)"; return; }
+    body = $("#cfgText").value;
+  } else {
+    body = JSON.stringify(collectCfgForm(), null, 2) + "\n";
+    $("#cfgText").value = body;
+  }
+  const j = await (await fetch("/api/config", { method: "PUT", headers: HDRS, body })).json();
+  $("#cfgMsg").textContent = j.ok ? "salvato ✓ — riavvia i server per applicare (Stato → Ferma → Avvia)" : j.error;
+  $("#cfgMsg").style.color = j.ok ? "var(--ok)" : "var(--err)";
+};
+
+/* ============ LOG ============ */
+async function loadLogs() {
+  if (!$("#logsPage").classList.contains("on")) return;
+  const j = await (await fetch(`/api/logs?name=${$("#logSel").value}&lines=300`)).json();
+  const box = $("#logBox");
+  const stick = box.scrollTop + box.clientHeight >= box.scrollHeight - 30;
+  box.textContent = j.lines.join("\n");
+  if (stick) box.scrollTop = box.scrollHeight;
+}
+$("#logSel").onchange = loadLogs;
+setInterval(() => { if ($("#logAuto").checked) loadLogs(); }, 3000);
+
+/* ============ avvio ============ */
+attachSlash($("#homeInp"), () => homeDirs[0] || "");
+attachSlash($("#inp"), () => cur()?.dirs[0] || "");
+renderChatList(); renderRecents();
+const h = new Date().getHours();
+$("#helloTxt").textContent = h < 6 ? "Notte fonda, eh?" : h < 13 ? "Buongiorno" : h < 18 ? "Buon pomeriggio" : "Buonasera";
+</script>
+</body>
+</html>

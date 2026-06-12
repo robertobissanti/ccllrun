@@ -1,0 +1,281 @@
+#!/usr/bin/env bash
+# ccllrun — Claude Code su llama-server locale (big+small) via proxy anthropic->openai.
+#
+# Precedenza configurazione (dal piu' debole al piu' forte):
+#   1. default interni
+#   2. file JSON  (~/.ccllrun/config.json, oppure --config <file>)
+#   3. variabili d'ambiente ccllrun_*
+#   4. flag CLI (vedi --help-ccllrun)
+#
+# Tutti gli argomenti non riconosciuti vengono passati a `claude`.
+
+set -u
+
+CC_DIR="$HOME/.ccllrun"
+VENV="$CC_DIR/venv"
+CONFIG_FILE="$CC_DIR/config.json"
+
+# ---------- 1. default ----------
+PORT=8765
+LLAMA_BIN="llama-server"
+BIG_PORT=8001
+SMALL_PORT=8002
+BIG_GGUF="$HOME/.lmstudio/models/unsloth/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"
+SMALL_GGUF="$HOME/.lmstudio/models/ghost-actual/Qwen3.6-9B-Heretic-History-Q4_K_M-GGUF/history-9b-Q4_K_M.gguf"
+MODEL_BIG="qwen-big"
+MODEL_SMALL="small-fast"
+PDF_MODE="hybrid"
+CTX_BIG=98304
+CTX_SMALL=32768
+BATCH=2048
+KV_TYPE="q8_0"          # f16 per massima qualita', q8_0 per risparmiare memoria
+NGL=99
+PARALLEL=1
+REASONING_BUDGET=4096
+PRESENCE_PENALTY=1.5
+MMPROJ=""               # vuoto = autodetect (mmproj-*.gguf accanto al BIG_GGUF)
+NO_SMALL=0
+EXTRA_BIG_FLAGS=""      # flag extra passati cosi' come sono a llama-server (big)
+# Output massimo che Claude Code puo' generare. Tenuto basso rispetto a CTX_BIG
+# per lasciare spazio al contesto ed evitare OOM su llama-server (Metal).
+CC_MAX_OUTPUT_TOKENS=32000
+# Soglia di auto-compact (token assoluti). Claude Code hardcoda la finestra a
+# 200k per i modelli non-Anthropic, ignorando CLAUDE_CODE_MAX_CONTEXT_TOKENS;
+# l'unica leva che funziona e' CLAUDE_CODE_AUTO_COMPACT_WINDOW (presa come
+# min(200k, questo valore)). La teniamo sotto a CTX_BIG (131072) col margine per
+# output+buffer, cosi' il compact scatta PRIMA del muro OOM di llama-server.
+CC_AUTO_COMPACT_WINDOW=115000
+
+# ---------- helper: leggi chiave da JSON ----------
+json_get() {  # json_get <file> <key>
+  python3 - "$1" "$2" <<'PY' 2>/dev/null
+import json, sys, os
+try:
+    v = json.load(open(sys.argv[1])).get(sys.argv[2])
+    if isinstance(v, str):
+        v = os.path.expanduser(v)
+    if v is not None:
+        print(v if not isinstance(v, bool) else int(v))
+except Exception:
+    pass
+PY
+}
+
+# ---------- 3. env (sopra i default, sotto il JSON? no: JSON < env) ----------
+apply_env() {
+  PORT="${ccllrun_PROXY_PORT:-$PORT}"
+  LLAMA_BIN="${ccllrun_LLAMA_BIN:-$LLAMA_BIN}"
+  BIG_PORT="${ccllrun_BIG_PORT:-$BIG_PORT}"
+  SMALL_PORT="${ccllrun_SMALL_PORT:-$SMALL_PORT}"
+  BIG_GGUF="${ccllrun_GGUF_BIG:-$BIG_GGUF}"
+  SMALL_GGUF="${ccllrun_GGUF_SMALL:-$SMALL_GGUF}"
+  MODEL_BIG="${ccllrun_MODEL_BIG:-$MODEL_BIG}"
+  MODEL_SMALL="${ccllrun_MODEL_SMALL:-$MODEL_SMALL}"
+  PDF_MODE="${ccllrun_PDF_MODE:-$PDF_MODE}"
+  CTX_BIG="${ccllrun_CTX_BIG:-$CTX_BIG}"
+  KV_TYPE="${ccllrun_KV_TYPE:-$KV_TYPE}"
+  MMPROJ="${ccllrun_MMPROJ:-$MMPROJ}"
+}
+
+apply_config() {  # apply_config <file>
+  local f="$1" v
+  [[ -f "$f" ]] || return 0
+  for pair in \
+    "PORT proxy_port" "LLAMA_BIN llama_bin" "BIG_PORT big_port" \
+    "SMALL_PORT small_port" "BIG_GGUF big_gguf" "SMALL_GGUF small_gguf" \
+    "MODEL_BIG model_big" "MODEL_SMALL model_small" "PDF_MODE pdf_mode" \
+    "CTX_BIG ctx_big" "CTX_SMALL ctx_small" "BATCH batch" "KV_TYPE kv_type" \
+    "NGL ngl" "PARALLEL parallel" "REASONING_BUDGET reasoning_budget" \
+    "PRESENCE_PENALTY presence_penalty" "MMPROJ mmproj" "NO_SMALL no_small" \
+    "EXTRA_BIG_FLAGS extra_big_flags" "CC_MAX_OUTPUT_TOKENS cc_max_output_tokens" \
+    "CC_AUTO_COMPACT_WINDOW cc_auto_compact_window"
+  do
+    set -- $pair
+    v="$(json_get "$f" "$2")"
+    [[ -n "$v" ]] && eval "$1=\"\$v\""
+  done
+}
+
+usage_ccllrun() {
+  cat <<EOF
+ccllrun [opzioni ccllrun] [argomenti claude...]
+
+Opzioni:
+  --config <file>        usa un config JSON alternativo
+  --big-gguf <path>      modello grande
+  --small-gguf <path>    modello piccolo ("" per disattivarlo)
+  --no-small             non avviare il modello piccolo
+  --ctx <n>              context del big (default $CTX_BIG)
+  --kv <tipo>            f16|q8_0|q4_0 per la KV cache (default $KV_TYPE)
+  --mmproj <path|off>    projector visione (default: autodetect)
+  --parallel <n>         slot paralleli llama-server (default $PARALLEL)
+  --pdf-mode <m>         text|image|hybrid (default $PDF_MODE)
+  --port <n>             porta proxy (default $PORT)
+  stop                   ferma i llama-server
+  --help-ccllrun         questo aiuto
+
+Config JSON ($CONFIG_FILE), chiavi: big_gguf, small_gguf, ctx_big, ctx_small,
+batch, kv_type, ngl, parallel, reasoning_budget, presence_penalty, mmproj,
+pdf_mode, proxy_port, big_port, small_port, model_big, model_small,
+no_small, extra_big_flags, llama_bin.
+EOF
+}
+
+# ---------- parsing argomenti: i nostri flag vengono consumati, il resto va a claude ----------
+CLAUDE_ARGS=()
+CLI_OVERRIDES=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --config)        CONFIG_FILE="$2"; shift 2 ;;
+    --big-gguf)      CLI_OVERRIDES+=("BIG_GGUF=$2"); shift 2 ;;
+    --small-gguf)    CLI_OVERRIDES+=("SMALL_GGUF=$2"); shift 2 ;;
+    --no-small)      CLI_OVERRIDES+=("NO_SMALL=1"); shift ;;
+    --ctx)           CLI_OVERRIDES+=("CTX_BIG=$2"); shift 2 ;;
+    --kv)            CLI_OVERRIDES+=("KV_TYPE=$2"); shift 2 ;;
+    --mmproj)        CLI_OVERRIDES+=("MMPROJ=$2"); shift 2 ;;
+    --parallel)      CLI_OVERRIDES+=("PARALLEL=$2"); shift 2 ;;
+    --pdf-mode)      CLI_OVERRIDES+=("PDF_MODE=$2"); shift 2 ;;
+    --port)          CLI_OVERRIDES+=("PORT=$2"); shift 2 ;;
+    --help-ccllrun)  usage_ccllrun; exit 0 ;;
+    *)               CLAUDE_ARGS+=("$1"); shift ;;
+  esac
+done
+
+apply_config "$CONFIG_FILE"
+apply_env
+for ov in ${CLI_OVERRIDES[@]+"${CLI_OVERRIDES[@]}"}; do eval "$ov"; done
+
+# ---------- comandi pass-through / stop ----------
+case "${CLAUDE_ARGS[0]:-}" in
+  --version|-v|--help|-h|doctor|mcp|config|update|install|migrate-installer|setup-token)
+    exec claude "${CLAUDE_ARGS[@]}" ;;
+  stop)
+    for f in "$CC_DIR"/llama-*.pid "$CC_DIR"/proxy.pid; do
+      [[ -f "$f" ]] && kill "$(cat "$f")" 2>/dev/null
+      rm -f "$f"
+    done
+    # fallback: i pidfile possono essere marci — uccidi chi è in ascolto sulle porte
+    for p in "$BIG_PORT" "$SMALL_PORT" "$PORT"; do
+      for pid in $(/usr/sbin/lsof -ti "tcp:$p" -sTCP:LISTEN 2>/dev/null); do
+        kill "$pid" 2>/dev/null
+      done
+    done
+    echo "[ccllrun] server fermati."
+    exit 0 ;;
+esac
+
+# modalita' "servers": avvia big+small+proxy in background ed esce (usata da ccllrun Studio)
+SERVERS_ONLY=0
+[[ "${CLAUDE_ARGS[0]:-}" == "servers" ]] && SERVERS_ONLY=1
+
+if ! grep -q 'CLAUDE_CODE_ATTRIBUTION_HEADER' "$HOME/.claude/settings.json" 2>/dev/null; then
+  echo "[ccllrun] ATTENZIONE: aggiungi \"CLAUDE_CODE_ATTRIBUTION_HEADER\": \"0\" in env di ~/.claude/settings.json" >&2
+fi
+
+health() { curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$1/health" 2>/dev/null; }
+
+# ---------- mmproj autodetect ----------
+if [[ -z "$MMPROJ" ]]; then
+  for cand in "$(dirname "$BIG_GGUF")"/mmproj-*.gguf; do
+    [[ -f "$cand" ]] && MMPROJ="$cand" && break
+  done
+fi
+MMPROJ_FLAGS=()
+[[ -n "$MMPROJ" && "$MMPROJ" != "off" && -f "$MMPROJ" ]] && MMPROJ_FLAGS=(--mmproj "$MMPROJ")
+
+# ---------- BIG ----------
+if [[ "$(health "$BIG_PORT")" != "200" ]]; then
+  if [[ ! -f "$BIG_GGUF" ]]; then
+    echo "[ccllrun] GGUF non trovato: $BIG_GGUF" >&2
+    exit 1
+  fi
+  MTP_FLAGS=()
+  case "$(echo "$BIG_GGUF" | tr '[:lower:]' '[:upper:]')" in
+    *MTP*) MTP_FLAGS=(--spec-type draft-mtp --spec-draft-n-max 2) ;;
+  esac
+  echo "[ccllrun] avvio $MODEL_BIG su :$BIG_PORT (ctx=$CTX_BIG kv=$KV_TYPE mmproj=${MMPROJ:-no})..."
+  # shellcheck disable=SC2086
+  nohup "$LLAMA_BIN" --model "$BIG_GGUF" --alias "$MODEL_BIG" \
+    --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0 \
+    "${MTP_FLAGS[@]}" ${MMPROJ_FLAGS[@]+"${MMPROJ_FLAGS[@]}"} \
+    --ctx-size "$CTX_BIG" -b "$BATCH" -ub "$BATCH" -fa on -ngl "$NGL" \
+    --cache-type-k "$KV_TYPE" --cache-type-v "$KV_TYPE" \
+    --cache-reuse 256 --port "$BIG_PORT" --parallel "$PARALLEL" \
+    --reasoning-budget "$REASONING_BUDGET" --presence-penalty "$PRESENCE_PENALTY" \
+    $EXTRA_BIG_FLAGS \
+    >> "$CC_DIR/llama-big.log" 2>&1 &
+  echo $! > "$CC_DIR/llama-big.pid"
+  for _ in $(seq 1 600); do
+    [[ "$(health "$BIG_PORT")" == "200" ]] && break
+    sleep 1
+  done
+  if [[ "$(health "$BIG_PORT")" != "200" ]]; then
+    echo "[ccllrun] $MODEL_BIG non pronto, vedi $CC_DIR/llama-big.log" >&2
+    exit 1
+  fi
+fi
+
+# ---------- SMALL ----------
+if [[ "$NO_SMALL" != "1" && -n "$SMALL_GGUF" && "$SMALL_GGUF" != "$BIG_GGUF" && "$(health "$SMALL_PORT")" != "200" ]]; then
+  echo "[ccllrun] avvio $MODEL_SMALL su :$SMALL_PORT..."
+  nohup "$LLAMA_BIN" --model "$SMALL_GGUF" --alias "$MODEL_SMALL" \
+    --ctx-size "$CTX_SMALL" -b "$BATCH" -ub "$BATCH" -fa on -ngl "$NGL" \
+    --cache-reuse 256 --port "$SMALL_PORT" \
+    >> "$CC_DIR/llama-small.log" 2>&1 &
+  echo $! > "$CC_DIR/llama-small.pid"
+fi
+
+# ---------- proxy + claude ----------
+if [[ ! -f "$CC_DIR/proxy.py" ]]; then
+  echo "[ccllrun] manca $CC_DIR/proxy.py" >&2
+  exit 1
+fi
+if [[ ! -x "$VENV/bin/python" ]]; then
+  echo "[ccllrun] primo avvio: creo il venv..."
+  python3 -m venv "$VENV" || exit 1
+  "$VENV/bin/pip" install -q --upgrade pip aiohttp pymupdf || exit 1
+fi
+
+SMALL_UPSTREAM=""
+[[ "$NO_SMALL" != "1" && -n "$SMALL_GGUF" && "$SMALL_GGUF" != "$BIG_GGUF" ]] && SMALL_UPSTREAM="http://127.0.0.1:$SMALL_PORT"
+
+# non avviare un secondo proxy se ce n'è già uno sulla porta (il doppione
+# morirebbe subito lasciando un pidfile marcio)
+PROXY_PID=""
+if ! curl -s -o /dev/null "http://127.0.0.1:$PORT/v1/models" 2>/dev/null; then
+  CCRUN_UPSTREAM="http://127.0.0.1:$BIG_PORT" \
+  CCRUN_UPSTREAM_SMALL="$SMALL_UPSTREAM" \
+  CCRUN_SMALL_NAME="$MODEL_SMALL" \
+  CCRUN_PROXY_PORT="$PORT" \
+  CCRUN_PDF_MODE="$PDF_MODE" \
+  "$VENV/bin/python" "$CC_DIR/proxy.py" >> "$CC_DIR/proxy.log" 2>&1 &
+  PROXY_PID=$!
+  trap 'kill $PROXY_PID 2>/dev/null' INT TERM
+  for _ in $(seq 1 50); do
+    curl -s -o /dev/null "http://127.0.0.1:$PORT/v1/models" 2>/dev/null && break
+    sleep 0.1
+  done
+fi
+
+if [[ "$SERVERS_ONLY" == "1" ]]; then
+  if [[ -n "$PROXY_PID" ]]; then
+    echo "$PROXY_PID" > "$CC_DIR/proxy.pid"
+  else  # proxy preesistente riusato: registra il pid vero
+    /usr/sbin/lsof -ti "tcp:$PORT" -sTCP:LISTEN 2>/dev/null | head -1 > "$CC_DIR/proxy.pid"
+  fi
+  trap - INT TERM
+  echo "[ccllrun] server attivi: big :$BIG_PORT, small :$SMALL_PORT, proxy :$PORT (ferma con: ccllrun stop)"
+  exit 0
+fi
+
+ANTHROPIC_BASE_URL="http://127.0.0.1:$PORT" \
+ANTHROPIC_AUTH_TOKEN="${ANTHROPIC_AUTH_TOKEN:-sk-local}" \
+ANTHROPIC_MODEL="$MODEL_BIG" \
+ANTHROPIC_SMALL_FAST_MODEL="$MODEL_SMALL" \
+CLAUDE_CODE_AUTO_COMPACT_WINDOW="${CLAUDE_CODE_AUTO_COMPACT_WINDOW:-$CC_AUTO_COMPACT_WINDOW}" \
+CLAUDE_CODE_MAX_OUTPUT_TOKENS="${CLAUDE_CODE_MAX_OUTPUT_TOKENS:-$CC_MAX_OUTPUT_TOKENS}" \
+claude ${CLAUDE_ARGS[@]+"${CLAUDE_ARGS[@]}"}
+code=$?
+[[ -n "$PROXY_PID" ]] && kill "$PROXY_PID" 2>/dev/null
+trap - INT TERM
+exit $code

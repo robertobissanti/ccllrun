@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="120" y1="96" x2="904" y2="928" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#353533"/><stop offset="1" stop-color="#1d1d1b"/>
+    </linearGradient>
+    <linearGradient id="face" x1="206" y1="132" x2="790" y2="874" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e08b6e"/><stop offset="1" stop-color="#c96442"/>
+    </linearGradient>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="224" fill="url(#bg)"/>
+  <polygon fill="url(#face)" fill-opacity=".30" stroke="#e08b6e" stroke-width="30" stroke-linejoin="round" points="612.61,302.48 596.15,210.46 726.80,326.56 824.00,490.33 753.43,475.45"/>
+  <polygon fill="url(#face)" fill-opacity=".30" stroke="#e08b6e" stroke-width="30" stroke-linejoin="round" points="753.43,475.45 824.00,490.33 753.43,685.53 639.24,791.30 639.24,661.45"/>
+  <polygon fill="url(#face)" fill-opacity=".30" stroke="#e08b6e" stroke-width="30" stroke-linejoin="round" points="384.76,232.70 596.15,210.46 612.61,302.48 411.39,381.59 270.57,338.47"/>
+  <polygon fill="url(#face)" fill-opacity=".30" stroke="#e08b6e" stroke-width="30" stroke-linejoin="round" points="297.20,697.44 427.85,603.45 639.24,661.45 639.24,791.30 427.85,813.54"/>
+  <polygon fill="url(#face)" fill-opacity=".30" stroke="#e08b6e" stroke-width="30" stroke-linejoin="round" points="270.57,338.47 411.39,381.59 427.85,603.45 297.20,697.44 200.00,533.67"/>
+  <polygon fill="url(#face)" fill-opacity=".30" stroke="#e08b6e" stroke-width="30" stroke-linejoin="round" points="411.39,381.59 612.61,302.48 753.43,475.45 639.24,661.45 427.85,603.45"/>
+  <path d="M612.61 302.48L596.15 210.46M596.15 210.46L726.80 326.56M726.80 326.56L824.00 490.33M824.00 490.33L753.43 475.45M753.43 475.45L612.61 302.48M824.00 490.33L753.43 685.53M753.43 685.53L639.24 791.30M639.24 791.30L639.24 661.45M639.24 661.45L753.43 475.45M384.76 232.70L596.15 210.46M612.61 302.48L411.39 381.59M411.39 381.59L270.57 338.47M270.57 338.47L384.76 232.70M297.20 697.44L427.85 603.45M427.85 603.45L639.24 661.45M639.24 791.30L427.85 813.54M427.85 813.54L297.20 697.44M411.39 381.59L427.85 603.45M297.20 697.44L200.00 533.67M200.00 533.67L270.57 338.47" fill="none" stroke="#f7d8cc" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" opacity=".95"/>
+</svg>
