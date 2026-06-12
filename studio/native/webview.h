@@ -247,6 +247,34 @@ typedef struct {
     WKWebView *webview;
 } ds4_wv;
 
+@interface DS4AppMenuTarget : NSObject
+- (void)showAbout:(id)sender;
+@end
+@implementation DS4AppMenuTarget
+- (void)showAbout:(id)sender {
+    (void)sender;
+    NSDictionary *info = [[NSBundle mainBundle] infoDictionary];
+    NSString *name = info[@"CFBundleDisplayName"] ?: info[@"CFBundleName"] ?: @"ccllrun Studio";
+    NSString *shortVersion = info[@"CFBundleShortVersionString"] ?: @"0.1";
+    NSString *build = info[@"CFBundleVersion"] ?: shortVersion;
+
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.messageText = name;
+    alert.informativeText = [NSString stringWithFormat:
+        @"Versione %@ (%@)\n\n© 2026 Roberto Bissanti\nroberto.bissanti@gmail.com\nLicenza MIT",
+        shortVersion, build];
+    alert.icon = [NSApp applicationIconImage];
+    [alert addButtonWithTitle:@"OK"];
+    [alert runModal];
+}
+@end
+
+static DS4AppMenuTarget *ds4_menu_target(void) {
+    static DS4AppMenuTarget *target = nil;
+    if (!target) target = [[DS4AppMenuTarget alloc] init];
+    return target;
+}
+
 /* Menu bar with the standard key equivalents. Without an Edit menu, Cocoa
  * gives WKWebView NO ⌘C/⌘V/⌘X/⌘A/⌘Z — key equivalents are routed through
  * the menu — and ⌘Q/⌘W/⌘M/⌘H would be dead too. App-specific shortcuts
@@ -260,6 +288,11 @@ static void ds4_build_menubar(const char *title) {
 
     NSMenuItem *appItem = [bar addItemWithTitle:@"" action:nil keyEquivalent:@""];
     NSMenu *appMenu = [[NSMenu alloc] init];
+    NSMenuItem *aboutItem = [appMenu addItemWithTitle:[@"Info su " stringByAppendingString:name]
+                                              action:@selector(showAbout:)
+                                       keyEquivalent:@""];
+    aboutItem.target = ds4_menu_target();
+    [appMenu addItem:[NSMenuItem separatorItem]];
     [appMenu addItemWithTitle:[@"Hide " stringByAppendingString:name]
                        action:@selector(hide:) keyEquivalent:@"h"];
     [appMenu addItem:[NSMenuItem separatorItem]];

@@ -7,6 +7,7 @@
 **Claude Code on local models. No cloud.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-0.1-d97757)](#ccllrun-studio-macos-app)
 [![Platform](https://img.shields.io/badge/platform-macOS%20Apple%20Silicon-black?logo=apple)](#requirements)
 [![100% Local](https://img.shields.io/badge/AI-100%25%20local-success)](#)
 [![Engine](https://img.shields.io/badge/engine-llama.cpp-blue)](https://github.com/ggml-org/llama.cpp)
@@ -26,6 +27,8 @@ ccllrun Studio (:8770) ─── native dashboard: headless chat, status, config
 ```
 
 Everything stays on your machine: the engine listens on `127.0.0.1` only, no data ever leaves.
+
+Current Studio version: **0.1 (0.1)**. Author/contact: **Roberto Bissanti** — [roberto.bissanti@gmail.com](mailto:roberto.bissanti@gmail.com). License: **MIT**.
 
 ## 30-second start
 
@@ -164,6 +167,7 @@ The app is **not distributed pre-built**: you compile it yourself with `make`. T
 - **Status**: Start/Stop toggle + Restart, server health cards, setup doctor with remedies.
 - **Config**: graphical (or raw JSON) editor for `~/.ccllrun/config.json`. After changing server parameters: Restart.
 - **Live logs** for big/small/proxy.
+- **Info** page with version 0.1, author email, copyright and MIT license.
 
 ## Configuration
 
