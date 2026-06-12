@@ -97,11 +97,12 @@
   #logo .brandMark { width: 19px; height: 19px; }
   #logo .appName { color: var(--accent); }
   #logo .appName .studioName { color: var(--text); }
-  #btnNew { margin: 0 6px 14px; text-align: left; }
+  #btnNew { margin: 0 6px 14px; text-align: left; width: calc(100% - 12px); }
   #side .sect { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .8px; padding: 8px 12px 4px; }
   #chatList { flex: 1; overflow-y: auto; }
-  .citem { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 8px; color: var(--dim);
-           cursor: pointer; font-size: 13px; }
+  #btnNew, .citem { min-height: 38px; border-radius: 9px; padding: 8px 12px; font-size: 13px; }
+  .citem { display: flex; align-items: center; gap: 6px; margin: 0 6px; color: var(--dim);
+           cursor: pointer; }
   .citem:hover { background: var(--panel); color: var(--text); }
   .citem.on { background: var(--panel2); color: var(--text); }
   .citem .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
