@@ -320,6 +320,11 @@
       <span id="chatDirs"></span>
       <span class="chip add" id="chatAddDir">📁 +</span>
       <span style="margin-left:auto"></span>
+      <select id="permSel" title="In headless non esiste il prompt interattivo di approvazione: i comandi non coperti dalla modalità vengono negati. Per compilare/eseguire serve 'tutto consentito'.">
+        <option value="acceptEdits">permessi: modifiche file</option>
+        <option value="bypassPermissions">permessi: tutto consentito</option>
+        <option value="plan">permessi: solo piano</option>
+      </select>
       <button id="btnLaunch">⌁ Apri in Claude Code</button>
     </div>
     <div id="msgs"></div>
@@ -570,6 +575,7 @@ function openChat(id) {
   document.querySelectorAll(".nav").forEach(n => n.classList.remove("on"));
   $("#chatTitle").textContent = s.title;
   renderChatDirs(); renderChatList();
+  $("#permSel").value = s.permMode || "acceptEdits";
   $("#msgs").innerHTML = "";
   s.msgs.forEach(m => {
     if (m.role !== "user" && m.role !== "assistant") return;
@@ -590,6 +596,15 @@ function renderChatDirs() {
     x.onclick = () => { s.dirs.splice(+x.dataset.i, 1); save(); renderChatDirs(); });
   $("#btnLaunch").style.display = s.dirs.length ? "" : "none";
 }
+/* modalità permessi per chat: in headless niente prompt interattivo, quindi la
+   scelta va fatta QUI; vale dal turno successivo (anche per i --resume) */
+$("#permSel").onchange = () => {
+  const s = cur(); if (!s) return;
+  s.permMode = $("#permSel").value; save();
+  $("#stats").textContent = s.permMode === "bypassPermissions"
+    ? "permessi: tutto consentito — Claude può eseguire qualsiasi comando in questa chat"
+    : "permessi aggiornati per i prossimi turni";
+};
 $("#chatAddDir").onclick = async () => {
   const s = cur(); if (!s) return;
   const d = await pickDir();
@@ -819,7 +834,8 @@ async function runTurn(s, text) {
       headers: { "Content-Type": "application/json", ...HDRS },
       signal: aborter.signal,
       body: JSON.stringify({ prompt: text, cwd: s.dirs[0] || null,
-                             add_dirs: s.dirs.slice(1), session_id: s.claudeSid || null }) });
+                             add_dirs: s.dirs.slice(1), session_id: s.claudeSid || null,
+                             permission_mode: s.permMode || "acceptEdits" }) });
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "HTTP " + r.status);
     const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = "";
     for (;;) {
