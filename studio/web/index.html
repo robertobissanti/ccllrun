@@ -226,11 +226,11 @@
   button.cpy:hover { color: var(--text); background: var(--panel2); }
   .cpy svg, .copyFloat svg { width: 14px; height: 14px; stroke: currentColor; fill: none;
                              stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-  /* copia flottante per i blocchi lunghi: sticky in alto a destra della parte visibile */
+  /* copia flottante per le risposte: sticky in alto a destra della parte visibile */
   .copyFloat { position: sticky; top: 8px; float: right; display: none; margin: -2px -4px 4px 10px;
                background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
                padding: 5px; cursor: pointer; color: var(--dim); z-index: 3; line-height: 0; }
-  .msg.tall .copyFloat { display: inline-flex; }
+  .msg.bot .copyFloat { display: inline-flex; }
   .copyFloat:hover { color: var(--text); border-color: var(--accent); }
   button.codeCopy { position: sticky; top: 6px; float: right; margin: -4px -6px 6px 10px;
                     background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
@@ -256,6 +256,20 @@
   button.icon:hover { border-color: var(--accent); color: var(--accent); }
   button.icon.stop svg { fill: currentColor; stroke: none; }
   button.icon:disabled { opacity: .35; }
+  .composerBar { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .permChip { display: inline-flex; align-items: center; gap: 7px; background: var(--panel2);
+              border: 1px solid var(--border); border-radius: 20px; padding: 4px 9px 4px 10px;
+              color: var(--dim); font-size: 12px; }
+  .permChip:hover { border-color: var(--accent); color: var(--text); }
+  .permChip select { appearance: none; -webkit-appearance: none; background: transparent; border: none;
+                     color: inherit; padding: 0 18px 0 0; font: 12px var(--mono); outline: none; cursor: pointer;
+                     min-width: 0; max-width: 210px; }
+  .permChip .chev { width: 14px; height: 14px; margin-left: -18px; pointer-events: none; stroke-width: 2; }
+  .launchBtn { display: inline-flex; align-items: center; gap: 8px; border-radius: 20px;
+               padding: 6px 13px; color: var(--text); background: var(--panel2);
+               border-color: var(--border); font-size: 13px; font-weight: 600; }
+  .launchBtn:hover { color: var(--text); border-color: var(--accent); }
+  .launchBtn .uiIcon { width: 15px; height: 15px; margin: 0; }
   /* menu dei comandi slash (come Claude Code quando digiti /) */
   .slashMenu { position: absolute; bottom: calc(100% + 8px); left: 0; right: 0; z-index: 6;
                background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
@@ -381,12 +395,10 @@
       <span id="chatDirs"></span>
       <span class="chip add" id="chatAddDir"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M3 6.5h7l2 2h9v9.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 8.5h18M12 12v5M9.5 14.5h5"/></svg> +</span>
       <span style="margin-left:auto"></span>
-      <select id="permSel" title="In headless non esiste il prompt interattivo di approvazione: i comandi non coperti dalla modalità vengono negati. Per compilare/eseguire serve 'tutto consentito'.">
-        <option value="acceptEdits">permessi: modifiche file</option>
-        <option value="bypassPermissions">permessi: tutto consentito</option>
-        <option value="plan">permessi: solo piano</option>
-      </select>
-      <button id="btnLaunch">⌁ Apri in Claude Code</button>
+      <button class="launchBtn" id="btnLaunch" title="Apri questa chat in Claude Code nel Terminale">
+        <svg class="uiIcon" viewBox="0 0 24 24"><path d="M4 7h16v10H4z"/><path d="m7 10 2.5 2L7 14M12 14h4M14 4h6v6M20 4l-7 7"/></svg>
+        Apri in Claude Code
+      </button>
     </div>
     <div id="msgs"></div>
     <div id="composer">
@@ -402,6 +414,17 @@
         <button class="icon" id="btnSend" title="Invia">
           <svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
         </button>
+      </div>
+      <div class="composerBar">
+        <label class="permChip" title="In headless non esiste il prompt interattivo di approvazione: i comandi non coperti dalla modalità vengono negati. Per compilare/eseguire serve 'tutto consentito'.">
+          <svg class="uiIcon" viewBox="0 0 24 24"><path d="M12 3 20 7v5c0 5-3.4 8.2-8 9-4.6-.8-8-4-8-9V7z"/><path d="M9 12l2 2 4-5"/></svg>
+          <select id="permSel">
+            <option value="acceptEdits">modifiche file</option>
+            <option value="bypassPermissions">tutto consentito</option>
+            <option value="plan">solo piano</option>
+          </select>
+          <svg class="uiIcon chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+        </label>
       </div>
     </div>
   </div>
