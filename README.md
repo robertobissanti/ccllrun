@@ -1,181 +1,239 @@
+<div align="center">
+
+<img src="studio/web/icon.svg" width="120" alt="ccllrun Studio icon">
+
 # ccllrun
 
-**Claude Code su modelli locali, senza cloud.**
+**Claude Code on local models. No cloud.**
 
-`ccllrun` esegue [Claude Code](https://docs.anthropic.com/claude-code) su modelli open serviti in locale da **llama.cpp** (`llama-server`), tramite un proxy che traduce l'API Anthropic in API OpenAI-compatibile. Include **ccllrun Studio**, un'app macOS nativa con chat, gestione dello stack, approvazione interattiva dei permessi e configurazione grafica.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS%20Apple%20Silicon-black?logo=apple)](#requirements)
+[![100% Local](https://img.shields.io/badge/AI-100%25%20local-success)](#)
+[![Engine](https://img.shields.io/badge/engine-llama.cpp-blue)](https://github.com/ggml-org/llama.cpp)
+[![Agent](https://img.shields.io/badge/agent-Claude%20Code-d97757)](https://docs.anthropic.com/claude-code)
+[![Models](https://img.shields.io/badge/models-GGUF%20%C2%B7%20Qwen-purple)](#models)
+
+🇮🇹 [Leggilo in italiano](README_it.md)
+
+</div>
+
+`ccllrun` runs [Claude Code](https://docs.anthropic.com/claude-code) on open models served locally by **llama.cpp** (`llama-server`), through a proxy that translates the Anthropic API into an OpenAI-compatible one. It ships with **ccllrun Studio**, a native macOS app with chat, stack management, interactive permission approval and graphical configuration.
 
 ```
-Claude Code ──ANTHROPIC_BASE_URL──▶ proxy.py (:8765) ──┬──▶ llama-server BIG   (:8001, es. Qwen3.6-35B-A3B)
-                                                       └──▶ llama-server SMALL (:8002, modello piccolo/veloce)
-ccllrun Studio (:8770) ─── dashboard web nativa: chat headless, stato, config, log
+Claude Code ──ANTHROPIC_BASE_URL──▶ proxy.py (:8765) ──┬──▶ llama-server BIG   (:8001, e.g. Qwen3.6-35B-A3B)
+                                                       └──▶ llama-server SMALL (:8002, small/fast model)
+ccllrun Studio (:8770) ─── native dashboard: headless chat, status, config, logs
 ```
 
-Tutto resta sulla tua macchina: l'engine ascolta solo su `127.0.0.1`, nessun dato esce.
+Everything stays on your machine: the engine listens on `127.0.0.1` only, no data ever leaves.
 
-## Caratteristiche
-
-- **CLI** (`ccllrun`): avvia big + small + proxy e apre Claude Code già puntato al modello locale; all'uscita ferma il proxy (i llama-server restano caldi per il lancio successivo).
-- **Doppio modello**: uno grande per il lavoro vero, uno piccolo per le richieste rapide di Claude Code (`ANTHROPIC_SMALL_FAST_MODEL`).
-- **PDF**: il proxy converte i blocchi `document` in testo estratto o pagine rasterizzate (modalità `text`/`image`/`hybrid`).
-- **Visione**: con il projector `mmproj-*.gguf` accanto al GGUF, screenshot e immagini funzionano.
-- **Context su misura**: la finestra di auto-compact di Claude Code viene allineata al contesto reale del modello (`CLAUDE_CODE_AUTO_COMPACT_WINDOW`), evitando gli out-of-memory su Metal.
-- **ccllrun Studio** (app macOS): chat che *è* Claude Code headless (stessi tool e permessi), **approvazione interattiva dei permessi** comando per comando con regole persistenti per progetto, rendering markdown, comandi slash con autocompletamento (`/context`, `/memory`, `/compact`, …), avvio automatico dello stack, setup doctor con i rimedi, editor di configurazione, log live.
-
-## Requisiti
-
-| Componente | Note | Installazione |
-|---|---|---|
-| macOS Apple Silicon | testato su Darwin 25 (M1 Ultra) | — |
-| **llama.cpp** (`llama-server`) | build recente con Metal; servono `--reasoning-budget`, `--cache-reuse`, `-fa` | `brew install llama.cpp` |
-| **Claude Code** (`claude`) | ≥ 2.x | `npm install -g @anthropic-ai/claude-code` |
-| **Python** | ≥ 3.10 con `venv` | `brew install python@3.13` |
-| Xcode CLT (`clang++`) | solo per compilare Studio | `xcode-select --install` |
-
-I moduli Python del proxy (`aiohttp`, `pymupdf`) vengono installati **automaticamente** al primo avvio in `~/.ccllrun/venv`. Le dipendenze esterne (llama.cpp, Claude Code) non sono inglobate: sono progetti grossi con i loro installer e cicli di rilascio — il *setup doctor* di Studio verifica che ci siano e suggerisce il comando di installazione per ciascuna.
-
-### Memoria
-
-Per il 35B-A3B Q4_K_XL: ~20 GB di pesi + KV cache (dipende da `ctx_big` e `kv_type`) + ~2 GB di mmproj + il modello small. Consigliati **≥ 48 GB** di memoria unificata con la config di default; con meno memoria riduci `ctx_big` o scegli un modello più piccolo.
-
-## Modelli
-
-Quelli usati e testati dall'autore (link Hugging Face):
-
-| Ruolo | Modello | Link |
-|---|---|---|
-| **big** | Qwen3.6-35B-A3B (MoE, Q4_K_XL) + mmproj per la visione | [unsloth/Qwen3.6-35B-A3B-GGUF](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF) |
-| big (alternativa) | Qwen3.6-27B con MTP (speculative decoding nativo) | [unsloth/Qwen3.6-27B-MTP-GGUF](https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF) |
-| **small** | history-9b (Q4_K_M) | [ghost-actual/Qwen3.6-9B-Heretic-History-Q4_K_M-GGUF](https://huggingface.co/ghost-actual/Qwen3.6-9B-Heretic-History-Q4_K_M-GGUF) |
-
-Scarica i `.gguf` (e l'eventuale `mmproj-*.gguf` nella stessa cartella del big) e indica i path in `~/.ccllrun/config.json`. Qualsiasi GGUF chat-instruct funziona; se il nome contiene `MTP`, ccllrun attiva da solo lo speculative decoding.
-
-## Installazione
+## 30-second start
 
 ```bash
-git clone https://github.com/<TUO-UTENTE>/ccllrun.git
-cd ccllrun
-chmod +x ccllrun
-sudo ln -sf "$PWD/ccllrun" /usr/local/bin/ccllrun   # o ~/bin se è nel PATH
-cp config.example.json ~/.ccllrun/config.json        # poi sistema i path dei GGUF
+git clone https://github.com/robertobissanti/ccllrun.git
+cd ccllrun && chmod +x ccllrun
+sudo ln -sf "$PWD/ccllrun" /usr/local/bin/ccllrun
+cp config.example.json ~/.ccllrun/config.json   # then fix the GGUF paths
+ccllrun                                          # starts everything, opens Claude Code
 ```
 
-Al primo avvio `ccllrun` crea da solo tutto il resto: `~/.ccllrun/`, il venv Python con le dipendenze del proxy, e installa/aggiorna `proxy.py` dal repo.
+First run bootstraps the rest by itself: `~/.ccllrun/`, the Python venv with the proxy dependencies, and `proxy.py` from the repo.
 
-In `~/.claude/settings.json` aggiungi (lo script avvisa se manca):
+## Features
+
+- **CLI** (`ccllrun`): starts big + small + proxy and opens Claude Code already pointed at the local model; on exit the proxy stops (llama-servers stay warm for the next launch).
+- **Two models**: a big one for the real work, a small one for Claude Code's quick requests (`ANTHROPIC_SMALL_FAST_MODEL`).
+- **PDF**: the proxy converts `document` blocks into extracted text or rasterized pages (`text`/`image`/`hybrid`).
+- **Vision**: with the `mmproj-*.gguf` projector next to the GGUF, screenshots and images just work.
+- **Right-sized context**: Claude Code's auto-compact window is aligned to the model's real context (`CLAUDE_CODE_AUTO_COMPACT_WINDOW`), preventing Metal out-of-memory crashes.
+- **ccllrun Studio** (macOS app): a chat that *is* headless Claude Code (same tools, same permissions), **interactive permission approval** per command with persistent per-project rules, markdown rendering, slash commands with autocomplete (`/context`, `/memory`, `/compact`, …), stack autostart, setup doctor with remedies, config editor, live logs.
+
+## Requirements
+
+| Component | Notes | Install |
+|---|---|---|
+| macOS Apple Silicon | tested on Darwin 25 (M1 Ultra) | — |
+| **llama.cpp** (`llama-server`) | recent build with Metal; needs `--reasoning-budget`, `--cache-reuse`, `-fa` | `brew install llama.cpp` |
+| **Claude Code** (`claude`) | ≥ 2.x | `npm install -g @anthropic-ai/claude-code` |
+| **Python** | ≥ 3.10 with `venv` | `brew install python@3.13` |
+| Xcode CLT (`clang++`) | only to build Studio | `xcode-select --install` |
+
+The proxy's Python modules (`aiohttp`, `pymupdf`) are installed **automatically** on first run into `~/.ccllrun/venv`. External dependencies (llama.cpp, Claude Code) are not vendored: they are large projects with their own installers and release cycles — Studio's *setup doctor* checks for them and suggests the install command for each.
+
+In `~/.claude/settings.json` add (the script warns if missing):
 
 ```json
 { "env": { "CLAUDE_CODE_ATTRIBUTION_HEADER": "0" } }
 ```
 
-> **Nota:** se il repo vive su un volume esterno/cloud, il volume deve essere montato quando lanci `ccllrun`.
+### Memory
 
-### ccllrun Studio (app macOS)
+For the 35B-A3B Q4_K_XL: ~20 GB of weights + KV cache (depends on `ctx_big` and `kv_type`) + ~2 GB for the mmproj + the small model. **≥ 48 GB** of unified memory recommended with the default config; with less, reduce `ctx_big` or pick a smaller model.
+
+## Models
+
+The ones used and tested by the author (Hugging Face links):
+
+| Role | Model | Link |
+|---|---|---|
+| **big** | Qwen3.6-35B-A3B (MoE, Q4_K_XL) + mmproj for vision | [unsloth/Qwen3.6-35B-A3B-GGUF](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF) |
+| big (alternative) | Qwen3.6-27B with MTP (native speculative decoding) | [unsloth/Qwen3.6-27B-MTP-GGUF](https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF) |
+| **small** | history-9b (Q4_K_M) | [ghost-actual/Qwen3.6-9B-Heretic-History-Q4_K_M-GGUF](https://huggingface.co/ghost-actual/Qwen3.6-9B-Heretic-History-Q4_K_M-GGUF) |
+
+Download the `.gguf` files (and the optional `mmproj-*.gguf` into the big model's folder) and set the paths in `~/.ccllrun/config.json`. Any chat-instruct GGUF works; if the filename contains `MTP`, ccllrun enables speculative decoding by itself.
+
+## CLI reference
+
+```bash
+ccllrun [ccllrun options] [claude arguments...]
+```
+
+Anything ccllrun doesn't recognize is passed through to `claude`.
+
+### Subcommands
+
+| Command | What it does |
+|---|---|
+| `ccllrun` | starts big + small + proxy (if not already up) and opens Claude Code |
+| `ccllrun servers` | starts the stack only, without Claude Code (used by Studio) |
+| `ccllrun stop` | stops llama-servers and proxy (pidfiles + port fallback) |
+| `ccllrun logs [big\|small\|proxy]` | follows the given log (`tail -f`, default: `big`) |
+| `ccllrun --help-ccllrun` | help |
+| `ccllrun doctor` / `mcp` / `config` / `update` / `install` / `setup-token` / `--version` / `--help` | passed straight to `claude` without starting the servers |
+
+### Options
+
+| Flag | Description |
+|---|---|
+| `--config <file>` | use an alternative config JSON |
+| `--big-gguf <path>` | big model |
+| `--small-gguf <path>` | small model (`""` to disable) |
+| `--no-small` | don't start the small model |
+| `--ctx <n>` | big model context (default 98304) |
+| `--kv <type>` | KV cache quantization: `f16` \| `q8_0` \| `q4_0` |
+| `--mmproj <path\|off>` | vision projector (default: autodetect next to the big GGUF) |
+| `--parallel <n>` | llama-server parallel slots (**divides the context per slot**) |
+| `--pdf-mode <m>` | `text` \| `image` \| `hybrid` |
+| `--port <n>` | proxy port (default 8765) |
+
+### Watching the logs from another terminal
+
+While Claude Code is running, open other terminal windows to watch what the servers are doing:
+
+```bash
+ccllrun logs big       # main model: loading progress, tokens/s, memory errors
+ccllrun logs small     # fast model
+ccllrun logs proxy     # Anthropic→OpenAI requests, PDF conversions, 4xx/5xx
+```
+
+(equivalent to `tail -f ~/.ccllrun/llama-big.log` etc.; Studio's **Log** page does the same with auto-refresh). `logs big` is especially useful on first start — model loading can take 1–2 minutes and the progress shows there — and whenever something stops responding: Metal out-of-memory and `failed to parse grammar` errors only show up there.
+
+## ccllrun Studio (macOS app)
 
 ```bash
 cd studio
-make run        # compila e apre "ccllrun Studio.app"
-make serve      # solo server su :8770 (sviluppo / accesso LAN con STUDIO_HOST=0.0.0.0)
+make run        # builds and opens "ccllrun Studio.app"
+make serve      # server only on :8770 (development / LAN with STUDIO_HOST=0.0.0.0)
 ```
 
-All'avvio Studio fa partire da solo lo stack (big + small + proxy), come la CLI; disattivabile con `"studio_autostart": false`.
+On launch Studio starts the stack by itself (big + small + proxy), just like the CLI; disable with `"studio_autostart": false`.
 
-## Uso (CLI)
+- **Chat** = headless Claude Code in the project folder you pick (first folder is the cwd, the others go to `--add-dir`). The conversation continues with `--resume`.
+- **Permissions**: per-chat selector (*file edits* / *allow everything* / *plan only*). In normal mode, when Claude wants to run an uncovered command an **approval card** appears with the exact command: *Allow* (once), *Always allow* (saves the rule, e.g. `Bash(gcc:*)`, into the project's `.claude/settings.local.json`), *Deny*.
+- **Markdown** in replies (toggle in Config → Studio); copying always returns the original markdown.
+- **Slash commands** with autocomplete: `/context`, `/memory`, `/compact`, `/cost`, `/init`, plus the project's custom commands.
+- **Status**: Start/Stop toggle + Restart, server health cards, setup doctor with remedies.
+- **Config**: graphical (or raw JSON) editor for `~/.ccllrun/config.json`. After changing server parameters: Restart.
+- **Live logs** for big/small/proxy.
 
-```bash
-ccllrun                         # avvia tutto e apre Claude Code
-ccllrun -c "fix the bug"        # gli argomenti non riconosciuti vanno a claude
-ccllrun --ctx 131072 --kv f16   # override al volo dei parametri llama-server
-ccllrun --no-small              # senza modello piccolo
-ccllrun --pdf-mode text         # PDF solo come testo estratto
-ccllrun servers                 # solo i server, senza Claude Code (usato da Studio)
-ccllrun stop                    # ferma i llama-server
-ccllrun logs                    # segue il log del modello big (tail -f)
-ccllrun --help-ccllrun          # aiuto
-```
+## Configuration
 
-I sottocomandi puri di `claude` (`doctor`, `mcp`, `config`, `update`, `--version`, …) passano direttamente senza avviare i server.
+Precedence (weakest to strongest): **built-in defaults → `~/.ccllrun/config.json` → `ccllrun_*` env vars → CLI flags**. Every key is optional, paths support `~`. See `config.example.json`.
 
-### Osservare i log da un altro terminale
+### All config keys
 
-Mentre Claude Code gira, apri altre finestre di terminale per seguire cosa fanno i server:
+| Key | Env | CLI | Default | Description |
+|---|---|---|---|---|
+| `big_gguf` | `ccllrun_GGUF_BIG` | `--big-gguf` | Qwen3.6-35B-A3B Q4_K_XL | main model |
+| `small_gguf` | `ccllrun_GGUF_SMALL` | `--small-gguf` | history-9b Q4_K_M | fast model (`""` to disable) |
+| `no_small` | — | `--no-small` | `false` | don't start the small model |
+| `model_big` | `ccllrun_MODEL_BIG` | — | `qwen-big` | API alias of the big model |
+| `model_small` | `ccllrun_MODEL_SMALL` | — | `small-fast` | API alias of the small model |
+| `ctx_big` | `ccllrun_CTX_BIG` | `--ctx` | 98304 | big context (**divided by `parallel`**) |
+| `ctx_small` | — | — | 32768 | small context |
+| `batch` | — | — | 2048 | batch size (`-b`/`-ub`) |
+| `kv_type` | `ccllrun_KV_TYPE` | `--kv` | `q8_0` | KV cache quantization (`f16`/`q8_0`/`q4_0`) — `q8_0` halves memory |
+| `ngl` | — | — | 99 | layers offloaded to GPU (99 = all) |
+| `parallel` | — | `--parallel` | 1 | parallel slots (>1 splits the context per slot) |
+| `reasoning_budget` | — | — | 4096 | max reasoning tokens |
+| `presence_penalty` | — | — | 1.5 | anti-repetition (lower it if code quality degrades) |
+| `mmproj` | `ccllrun_MMPROJ` | `--mmproj` | `""` (autodetect) | vision projector; `"off"` to disable |
+| `pdf_mode` | `ccllrun_PDF_MODE` | `--pdf-mode` | `hybrid` | `text` / `image` / `hybrid` |
+| `proxy_port` | `ccllrun_PROXY_PORT` | `--port` | 8765 | proxy port |
+| `big_port` | `ccllrun_BIG_PORT` | — | 8001 | big llama-server port |
+| `small_port` | `ccllrun_SMALL_PORT` | — | 8002 | small llama-server port |
+| `llama_bin` | `ccllrun_LLAMA_BIN` | — | `llama-server` | llama-server binary |
+| `extra_big_flags` | — | — | `""` | extra flags for the big server, e.g. `"--mlock --kv-unified"` |
+| `cc_auto_compact_window` | — | — | 115000 | Claude Code auto-compact threshold (keep it **below `ctx_big`**) |
+| `cc_max_output_tokens` | — | — | 32000 | Claude Code max output |
+| `studio_markdown` | — | — | `true` | markdown rendering in Studio's chat |
+| `studio_autostart` | — | — | `true` | Studio starts the stack on launch |
 
-```bash
-ccllrun logs big       # il modello principale: caricamento, token/s, errori di memoria
-ccllrun logs small     # il modello rapido
-ccllrun logs proxy     # le richieste Anthropic→OpenAI, conversioni PDF, errori 4xx/5xx
-```
+> **Why `cc_auto_compact_window`?** Claude Code assumes a 200k window for non-Anthropic models. On a local model with a smaller context it would fill past the limit and crash the GPU out of memory: this key makes it compact the conversation *before* hitting the wall.
 
-(equivale a `tail -f ~/.ccllrun/llama-big.log` ecc.; in alternativa c'è la pagina **Log** di Studio, che si aggiorna da sola). Utile in particolare `logs big` al primo avvio — il caricamento del modello può richiedere 1–2 minuti e lì si vede il progresso — e quando qualcosa non risponde: gli out-of-memory Metal e i `failed to parse grammar` compaiono solo qui.
+### Proxy environment variables
 
-## Uso (Studio)
-
-- **Chat** = Claude Code headless nella cartella di progetto che scegli (la prima cartella è il cwd, le altre vanno in `--add-dir`). La conversazione prosegue con `--resume`.
-- **Permessi**: selettore per chat (*modifiche file* / *tutto consentito* / *solo piano*). In modalità normale, quando Claude vuole eseguire un comando non coperto compare una **card di approvazione** con il comando esatto: *Consenti* (una volta), *Consenti sempre* (salva la regola, es. `Bash(gcc:*)`, in `.claude/settings.local.json` del progetto), *Nega*.
-- **Markdown** nelle risposte (interruttore in Config → Studio); la copia restituisce sempre il markdown originale.
-- **Comandi slash** con autocompletamento: `/context`, `/memory`, `/compact`, `/cost`, `/init`, più i comandi custom del progetto.
-- **Stato**: toggle Avvia/Ferma + Riavvia, card di salute dei server, setup doctor con i rimedi.
-- **Config**: editor grafico (o JSON raw) di `~/.ccllrun/config.json`. Dopo le modifiche ai parametri dei server: Riavvia.
-- **Log** live di big/small/proxy.
-
-## Configurazione
-
-Precedenza (dal più debole al più forte): **default interni → `~/.ccllrun/config.json` → env `ccllrun_*` → flag CLI**. Tutte le chiavi sono opzionali, i path supportano `~`. Vedi `config.example.json`.
-
-| Chiave | Default | Descrizione |
+| Variable | Default | Description |
 |---|---|---|
-| `big_gguf` / `small_gguf` | Qwen3.6-35B / history-9b | path dei modelli (`small_gguf: ""` o `no_small: true` per disattivare lo small) |
-| `ctx_big` / `ctx_small` | 98304 / 32768 | contesto (il big viene **diviso per `parallel`**) |
-| `kv_type` | `q8_0` | quantizzazione KV cache (`f16`/`q8_0`/`q4_0`) — `q8_0` dimezza la memoria |
-| `ngl` | 99 | layer su GPU (99 = tutti) |
-| `parallel` | 1 | slot paralleli (>1 divide il contesto per slot) |
-| `mmproj` | `""` (autodetect) | projector visione; `"off"` per disattivare |
-| `pdf_mode` | `hybrid` | `text` / `image` / `hybrid` |
-| `reasoning_budget` | 4096 | token massimi di ragionamento |
-| `presence_penalty` | 1.5 | anti-ripetizione (abbassare se il codice esce degradato) |
-| `batch` | 2048 | batch size (`-b`/`-ub`) |
-| `proxy_port` / `big_port` / `small_port` | 8765 / 8001 / 8002 | porte |
-| `model_big` / `model_small` | `qwen-big` / `small-fast` | alias esposti dall'API |
-| `extra_big_flags` | `""` | flag extra per llama-server big, es. `"--mlock"` |
-| `cc_auto_compact_window` | 115000 | soglia di auto-compact di Claude Code (sotto `ctx_big`!) |
-| `cc_max_output_tokens` | 32000 | output massimo di Claude Code |
-| `studio_markdown` | `true` | rendering markdown nella chat di Studio |
-| `studio_autostart` | `true` | Studio avvia lo stack all'apertura |
+| `CCRUN_PDF_MAX_PAGES` | 10 | max pages when rasterizing PDFs |
+| `CCRUN_PDF_DPI` | 150 | rasterization DPI |
+| `CCRUN_PDF_TEXT_MIN` | 40 | min chars to keep extracted text in `hybrid` mode |
 
-> **Perché `cc_auto_compact_window`?** Claude Code assume una finestra da 200k per i modelli non-Anthropic. Su un modello locale con contesto più piccolo riempirebbe oltre il limite mandando in out-of-memory la GPU: questa chiave gli fa compattare la conversazione *prima* del muro.
+### Studio environment variables
 
-## File e log
+| Variable | Default | Description |
+|---|---|---|
+| `STUDIO_PORT` | 8770 | dashboard port |
+| `STUDIO_HOST` | 127.0.0.1 | bind host (`0.0.0.0` for LAN access) |
+| `CCLLRUN_BIN` | autodetect | path of the `ccllrun` script |
+| `CLAUDE_BIN` | autodetect | path of the `claude` binary |
+
+After changing server parameters: `ccllrun stop` and restart (or Studio → Status → Restart) — otherwise the health check reuses the running servers with the old parameters.
+
+## Files and logs
 
 ```
-~/.ccllrun/                 ← creata automaticamente al primo avvio
-├── proxy.py                # installato/aggiornato dal repo
-├── config.json             # configurazione (opzionale)
-├── venv/                   # creato al primo avvio
+~/.ccllrun/                 ← created automatically on first run
+├── proxy.py                # installed/updated from the repo
+├── config.json             # configuration (optional)
+├── venv/                   # created on first run
 ├── llama-big.log/.pid
 ├── llama-small.log/.pid
 └── proxy.log
 ```
 
-## Risoluzione problemi
+## Troubleshooting
 
-- **`image input is not supported … mmproj`** → manca il projector: scarica `mmproj-*.gguf` nella cartella del GGUF big. Poi `ccllrun stop` e riavvia.
-- **`exceeds the available context size`** → `parallel > 1` divide `ctx_big` tra gli slot: riportalo a 1 o aumenta `ctx_big`.
-- **`qwen-big non pronto`** → guarda `~/.ccllrun/llama-big.log` (spesso memoria insufficiente: riduci `ctx_big` o usa `kv_type: q8_0`; oppure path GGUF errato).
-- **Errori `kIOGPUCommandBufferCallbackErrorOutOfMemory`** → contesto troppo grande per la memoria: riduci `ctx_big` e tieni `cc_auto_compact_window` sotto di esso.
-- **I PDF arrivano come `[PDF rimosso]`** → `~/.ccllrun/venv/bin/pip install pymupdf`.
-- **Output ripetitivo o codice degradato** → abbassa `presence_penalty` (1.0 o 0).
-- **La UI di Studio sembra vecchia** → sidebar → *Ricarica UI*.
+- **`image input is not supported … mmproj`** → the projector is missing: download `mmproj-*.gguf` into the big GGUF's folder. Then `ccllrun stop` and restart.
+- **`exceeds the available context size`** → `parallel > 1` splits `ctx_big` across slots: set it back to 1 or raise `ctx_big`.
+- **`qwen-big non pronto` / not ready** → check `ccllrun logs big` (usually out of memory: lower `ctx_big` or use `kv_type: q8_0`; or a wrong GGUF path).
+- **`kIOGPUCommandBufferCallbackErrorOutOfMemory` errors** → context too large for memory: lower `ctx_big` and keep `cc_auto_compact_window` below it.
+- **PDFs arrive as `[PDF rimosso]`** → `~/.ccllrun/venv/bin/pip install pymupdf`.
+- **Repetitive output or degraded code** → lower `presence_penalty` (1.0 or 0).
+- **Studio UI looks stale** → sidebar → *Reload UI*.
 
 ## Roadmap
 
-- [ ] **Download dei modelli da Hugging Face dentro Studio**: ricerca dei GGUF, stima se il modello entra nella memoria della macchina (pesi + KV cache al contesto scelto), download con progresso e aggiornamento automatico della config.
-- [ ] Selettore di modello al volo senza riavvio dello stack.
-- [ ] Supporto Linux (lo stack è già quasi tutto portabile; manca il wrapper nativo di Studio).
+- [ ] **Model downloads from Hugging Face inside Studio**: GGUF search, estimate whether the model fits the machine's memory (weights + KV cache at the chosen context), download with progress and automatic config update.
+- [ ] On-the-fly model switching without restarting the stack.
+- [ ] Linux support (the stack is mostly portable already; Studio's native wrapper is the missing piece).
 
-## Autore
+## Author
 
-**Roberto Bissanti** ([roberto.bissanti@gmail.com](mailto:roberto.bissanti@gmail.com)) — progettista nel settore delle fonti energetiche rinnovabili che usa l'AI locale per il lavoro tecnico di tutti i giorni. ccllrun nasce dall'esigenza pratica di avere Claude Code in formato GUI su hardware proprio (Mac Studio M1 Ultra).
-## Crediti e licenza
+**Roberto Bissanti** ([roberto.bissanti@gmail.com](mailto:roberto.bissanti@gmail.com)) — a photovoltaic-sector engineer who uses local AI for everyday technical work. ccllrun was born from the practical need of running Claude Code on his own hardware (Mac Studio M1 Ultra), with documents that never leave the machine.
 
-- Licenza **MIT** — vedi [LICENSE](LICENSE).
-- Il wrapper nativo di Studio (launcher C++ + WKWebView, `studio/native/webview.h`) e l'impostazione della dashboard derivano da **[DStudio](https://github.com/sk8erboi17/DStudio)** di **Giuseppe Perrotta** (BSD-3-Clause, vedi `studio/native/LICENSE.DStudio`). Grazie!
-- Motore: [llama.cpp](https://github.com/ggml-org/llama.cpp) · Agente: [Claude Code](https://docs.anthropic.com/claude-code) · Modelli: [Qwen](https://huggingface.co/Qwen) quantizzati da [unsloth](https://huggingface.co/unsloth).
+## Credits and license
+
+- **MIT** license — see [LICENSE](LICENSE).
+- Studio's native wrapper (C++ launcher + WKWebView, `studio/native/webview.h`) and the dashboard approach derive from **[DStudio](https://github.com/sk8erboi17/DStudio)** by **Giuseppe Perrotta** (BSD-3-Clause, see `studio/native/LICENSE.DStudio`). Thank you!
+- Engine: [llama.cpp](https://github.com/ggml-org/llama.cpp) · Agent: [Claude Code](https://docs.anthropic.com/claude-code) · Models: [Qwen](https://huggingface.co/Qwen) quantized by [unsloth](https://huggingface.co/unsloth).
