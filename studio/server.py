@@ -569,15 +569,24 @@ async def mark_svg(request):
                                      "Content-Type": "image/svg+xml"})
 
 
+# true se lo stack e' stato avviato da Studio (autostart): in tal caso lo
+# fermiamo alla chiusura. Se invece era gia' attivo (avviato a mano dalla CLI),
+# non lo tocchiamo: l'utente potrebbe volerlo tenere su dopo aver chiuso la GUI.
+STACK_STARTED_BY_STUDIO = False
+
+
 async def autostart_stack(app):
     """All'avvio di Studio avvia lo stack (big+small+proxy) come fa la CLI,
     se la config lo prevede e il proxy non e' gia' su. Non blocca la UI:
     gira in background, lo Stato si aggiorna da solo col polling."""
+    global STACK_STARTED_BY_STUDIO
     cfg = load_config()
     if not cfg.get("studio_autostart", True) or not Path(CCLLRUN_BIN).is_file():
         return
     if await http_json(f"http://127.0.0.1:{cfg['proxy_port']}/v1/models") is not None:
         return                                    # gia' attivo
+
+    STACK_STARTED_BY_STUDIO = True
 
     async def run():
         proc = await asyncio.create_subprocess_exec(
@@ -588,9 +597,26 @@ async def autostart_stack(app):
     asyncio.ensure_future(run())
 
 
+async def stop_stack_on_exit(app):
+    """Alla chiusura di Studio ferma lo stack che Studio stesso ha avviato.
+    web.run_app esegue on_cleanup anche sul SIGTERM mandato dal launcher nativo
+    (vedi native/app.cc: stop_server -> SIGTERM a server.py)."""
+    if not STACK_STARTED_BY_STUDIO or not Path(CCLLRUN_BIN).is_file():
+        return
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "bash", CCLLRUN_BIN, "stop", env=aug_env(),
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=15)
+        print(f"[studio] stop allo shutdown: {out.decode(errors='replace').strip()}", flush=True)
+    except Exception as exc:
+        print(f"[studio] stop allo shutdown fallito: {exc}", flush=True)
+
+
 def main():
     app = web.Application(client_max_size=64 * 1024 * 1024)
     app.on_startup.append(autostart_stack)
+    app.on_cleanup.append(stop_stack_on_exit)
     app.router.add_get("/", index)
     app.router.add_get("/mark.svg", mark_svg)
     app.router.add_static("/vendor", HERE / "web" / "vendor")
