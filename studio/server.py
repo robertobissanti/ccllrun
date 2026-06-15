@@ -65,6 +65,7 @@ DEFAULTS = {
     "small_gguf": str(Path.home() / ".lmstudio/models/ghost-actual/Qwen3.6-9B-Heretic-History-Q4_K_M-GGUF/history-9b-Q4_K_M.gguf"),
     "studio_markdown": True,
     "studio_autostart": True,
+    "cc_tool_search": False,
 }
 
 LOGS = {"big": "llama-big.log", "small": "llama-small.log", "proxy": "proxy.log"}
@@ -350,6 +351,9 @@ async def api_claude(request):
         # Output basso per lasciare spazio al contesto. Coerente con lo script ccllrun.
         "CLAUDE_CODE_AUTO_COMPACT_WINDOW": str(cfg.get("cc_auto_compact_window", 115000)),
         "CLAUDE_CODE_MAX_OUTPUT_TOKENS": str(cfg.get("cc_max_output_tokens", 32000)),
+        # tool search (vedi cc_tool_search): "1" attiva, "" la disattiva anche se
+        # presente nel settings.json globale. Sperimentale dietro proxy.
+        "ENABLE_TOOL_SEARCH": "1" if cfg.get("cc_tool_search") else "",
     })
     perm_mode = data.get("permission_mode") or "acceptEdits"
     cmd = [CLAUDE_BIN, "-p", "--output-format", "stream-json", "--verbose",

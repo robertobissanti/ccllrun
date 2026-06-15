@@ -45,6 +45,11 @@ CC_MAX_OUTPUT_TOKENS=32000
 # min(200k, questo valore)). La teniamo sotto a CTX_BIG (131072) col margine per
 # output+buffer, cosi' il compact scatta PRIMA del muro OOM di llama-server.
 CC_AUTO_COMPACT_WINDOW=115000
+# Tool search (ENABLE_TOOL_SEARCH): invia pochi tool e carica gli altri on-demand
+# -> prefill piu' veloce con tanti server MCP. SPERIMENTALE dietro proxy: richiede
+# che il proxy inoltri i blocchi `tool_reference` (questo proxy NON lo fa ancora),
+# altrimenti l'handshake dei tool si rompe e Claude Code resta idle. Default off.
+CC_TOOL_SEARCH=0
 
 # ---------- helper: leggi chiave da JSON ----------
 json_get() {  # json_get <file> <key>
@@ -88,7 +93,7 @@ apply_config() {  # apply_config <file>
     "NGL ngl" "PARALLEL parallel" "REASONING_BUDGET reasoning_budget" \
     "PRESENCE_PENALTY presence_penalty" "MMPROJ mmproj" "NO_SMALL no_small" \
     "EXTRA_BIG_FLAGS extra_big_flags" "CC_MAX_OUTPUT_TOKENS cc_max_output_tokens" \
-    "CC_AUTO_COMPACT_WINDOW cc_auto_compact_window"
+    "CC_AUTO_COMPACT_WINDOW cc_auto_compact_window" "CC_TOOL_SEARCH cc_tool_search"
   do
     set -- $pair
     v="$(json_get "$f" "$2")"
@@ -288,12 +293,22 @@ if [[ "$SERVERS_ONLY" == "1" ]]; then
   exit 0
 fi
 
+# tool search: forziamo il valore in base a cc_tool_search, cosi' ccllrun ha
+# l'ultima parola anche se ENABLE_TOOL_SEARCH e' gia' nel settings.json globale.
+# "1" = attiva (sperimentale dietro proxy), "" = il binario la considera off.
+if [[ "$CC_TOOL_SEARCH" == "1" || "$CC_TOOL_SEARCH" == "true" ]]; then
+  TOOL_SEARCH_ENV=1
+else
+  TOOL_SEARCH_ENV=""
+fi
+
 ANTHROPIC_BASE_URL="http://127.0.0.1:$PORT" \
 ANTHROPIC_AUTH_TOKEN="${ANTHROPIC_AUTH_TOKEN:-sk-local}" \
 ANTHROPIC_MODEL="$MODEL_BIG" \
 ANTHROPIC_SMALL_FAST_MODEL="$MODEL_SMALL" \
 CLAUDE_CODE_AUTO_COMPACT_WINDOW="${CLAUDE_CODE_AUTO_COMPACT_WINDOW:-$CC_AUTO_COMPACT_WINDOW}" \
 CLAUDE_CODE_MAX_OUTPUT_TOKENS="${CLAUDE_CODE_MAX_OUTPUT_TOKENS:-$CC_MAX_OUTPUT_TOKENS}" \
+ENABLE_TOOL_SEARCH="$TOOL_SEARCH_ENV" \
 claude ${CLAUDE_ARGS[@]+"${CLAUDE_ARGS[@]}"}
 code=$?
 [[ -n "$PROXY_PID" ]] && kill "$PROXY_PID" 2>/dev/null

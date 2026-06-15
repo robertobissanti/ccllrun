@@ -23,5 +23,6 @@
   "cc_max_output_tokens": 32000,
 
   "studio_markdown": true,
-  "studio_autostart": true
+  "studio_autostart": true,
+  "cc_tool_search": false
 }
