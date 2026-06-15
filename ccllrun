@@ -116,6 +116,9 @@ Opzioni:
   --parallel <n>         slot paralleli llama-server (default $PARALLEL)
   --pdf-mode <m>         text|image|hybrid (default $PDF_MODE)
   --port <n>             porta proxy (default $PORT)
+  --tool-search          attiva la tool search di Claude Code (prefill piu' veloce
+                         con molti server MCP; opzione d'avvio)
+  --no-tool-search       disattiva la tool search (scavalca settings.json globale)
   stop                   ferma i llama-server
   logs [big|small|proxy] segui il log indicato (tail -f, default: big)
   --help-ccllrun         questo aiuto
@@ -123,7 +126,8 @@ Opzioni:
 Config JSON ($CONFIG_FILE), chiavi: big_gguf, small_gguf, ctx_big, ctx_small,
 batch, kv_type, ngl, parallel, reasoning_budget, presence_penalty, mmproj,
 pdf_mode, proxy_port, big_port, small_port, model_big, model_small,
-no_small, extra_big_flags, llama_bin.
+no_small, extra_big_flags, llama_bin, cc_auto_compact_window,
+cc_max_output_tokens, cc_tool_search.
 EOF
 }
 
@@ -142,6 +146,8 @@ while [[ $# -gt 0 ]]; do
     --parallel)      CLI_OVERRIDES+=("PARALLEL=$2"); shift 2 ;;
     --pdf-mode)      CLI_OVERRIDES+=("PDF_MODE=$2"); shift 2 ;;
     --port)          CLI_OVERRIDES+=("PORT=$2"); shift 2 ;;
+    --tool-search)   CLI_OVERRIDES+=("CC_TOOL_SEARCH=1"); shift ;;
+    --no-tool-search) CLI_OVERRIDES+=("CC_TOOL_SEARCH=0"); shift ;;
     --help-ccllrun)  usage_ccllrun; exit 0 ;;
     *)               CLAUDE_ARGS+=("$1"); shift ;;
   esac

@@ -120,6 +120,7 @@ Anything ccllrun doesn't recognize is passed through to `claude`.
 | `--parallel <n>` | llama-server parallel slots (**divides the context per slot**) |
 | `--pdf-mode <m>` | `text` \| `image` \| `hybrid` |
 | `--port <n>` | proxy port (default 8765) |
+| `--tool-search` / `--no-tool-search` | enable/disable tool search (overrides global `settings.json`) |
 
 ### Watching the logs from another terminal
 
