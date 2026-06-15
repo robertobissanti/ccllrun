@@ -298,6 +298,15 @@
   .badge.up { color: var(--ok); border-color: rgba(63,185,106,.4); }
   .badge.down { color: var(--err); border-color: rgba(224,82,82,.35); }
   #startMsg { color: var(--dim); font-size: 12px; font-family: var(--mono); white-space: pre-wrap; }
+  /* modale di conferma (modifiche non salvate) */
+  #modalOverlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 50;
+                  display: none; align-items: center; justify-content: center; }
+  #modalOverlay.on { display: flex; }
+  .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+           padding: 20px 22px; max-width: 420px; box-shadow: 0 12px 40px rgba(0,0,0,.4); }
+  .modal h3 { font-size: 15px; margin-bottom: 8px; }
+  .modal p { color: var(--dim); font-size: 13px; margin-bottom: 18px; }
+  .modal .mrow { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 
   /* ---- config / log ---- */
   #cfgText { width: 100%; height: 420px; background: var(--panel); color: var(--text); border: 1px solid var(--border);
@@ -359,7 +368,7 @@
   <div id="chatList"></div>
   <div class="sect" style="margin-top:8px">Sistema</div>
   <div class="nav" data-p="status" onclick="go('status')"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M4 12h4l3-7 4 14 3-7h2"/></svg> Stato</div>
-  <div class="nav" data-p="config" onclick="go('config')"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg> Config</div>
+  <div class="nav" data-p="config" onclick="go('config')"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg> Impostazioni</div>
   <div class="nav" data-p="logs" onclick="go('logs')"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 12h6M10 16h6"/></svg> Log</div>
   <div class="nav" data-p="info" onclick="go('info')"><svg class="uiIcon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg> Info</div>
   <div class="nav" onclick="location.reload()" title="Ricarica l'interfaccia dal server (la WKWebView non ha ⌘R)"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M20 6v5h-5"/><path d="M20 11a8 8 0 1 0-2.3 5.7"/></svg> Ricarica UI</div>
@@ -448,7 +457,7 @@
   <!-- ============ CONFIG ============ -->
   <div class="page" id="configPage"><div class="pad">
     <div style="display:flex; align-items:baseline; gap:12px">
-      <h1>Config</h1>
+      <h1>Impostazioni</h1>
       <span style="flex:1"></span>
       <button id="btnCfgMode" title="Modifica il file a mano">{ } JSON</button>
     </div>
@@ -529,7 +538,21 @@ const save = () => localStorage.setItem("sessions", JSON.stringify(sessions));
 const cur = () => sessions.find(s => s.id === current);
 
 /* ============ navigazione ============ */
+function currentPage() {
+  const el = document.querySelector(".page.on");
+  return el ? el.id.replace("Page", "") : null;
+}
+
 function go(page) {
+  // guardia: lasciando le Impostazioni con modifiche non salvate, chiedi conferma
+  if (currentPage() === "config" && page !== "config" && cfgIsDirty()) {
+    confirmUnsaved(page);                // dialogo a 3 opzioni; gestisce lui la navigazione
+    return;
+  }
+  navTo(page);
+}
+
+function navTo(page) {
   document.querySelectorAll(".page").forEach(p => p.classList.remove("on"));
   $("#" + page + "Page").classList.add("on");
   document.querySelectorAll(".nav").forEach(n => n.classList.toggle("on", n.dataset.p === page));
@@ -1311,21 +1334,39 @@ function setCfgMode(json) {
 }
 $("#btnCfgMode").onclick = () => setCfgMode(!cfgJsonMode);
 
+/* snapshot dello stato salvato: serve a capire se ci sono modifiche non salvate.
+   Normalizziamo via JSON (l'ordine delle chiavi del form è stabile). */
+let cfgSnapshot = null;
+
+function cfgCurrentJson() {
+  if (cfgJsonMode) {
+    try { return JSON.stringify(JSON.parse($("#cfgText").value)); }
+    catch { return $("#cfgText").value; }   // JSON invalido: stringa grezza, diversa dallo snapshot
+  }
+  return JSON.stringify(collectCfgForm());
+}
+
+function cfgIsDirty() {
+  if (cfgSnapshot === null) return false;     // mai caricato
+  return cfgCurrentJson() !== cfgSnapshot;
+}
+
 async function loadConfig() {
   const j = await (await fetch("/api/config")).json();
   $("#cfgText").value = j.text;
   let cfg = {};
   try { cfg = JSON.parse(j.text); } catch {}
   renderCfgForm(cfg);
+  cfgSnapshot = cfgCurrentJson();             // baseline = stato appena caricato
   $("#cfgMsg").textContent = j.missing ? "config.json non esiste ancora: salvando lo crei." : "";
   $("#cfgMsg").style.color = "var(--dim)";
 }
-$("#btnCfgReload").onclick = loadConfig;
-$("#btnCfgSave").onclick = async () => {
+
+async function saveConfig() {
   let body;
   if (cfgJsonMode) {
     try { JSON.parse($("#cfgText").value); }
-    catch (e) { $("#cfgMsg").textContent = "JSON non valido: " + e.message; $("#cfgMsg").style.color = "var(--err)"; return; }
+    catch (e) { $("#cfgMsg").textContent = "JSON non valido: " + e.message; $("#cfgMsg").style.color = "var(--err)"; return false; }
     body = $("#cfgText").value;
   } else {
     body = JSON.stringify(collectCfgForm(), null, 2) + "\n";
@@ -1334,7 +1375,27 @@ $("#btnCfgSave").onclick = async () => {
   const j = await (await fetch("/api/config", { method: "PUT", headers: HDRS, body })).json();
   $("#cfgMsg").textContent = j.ok ? "salvato ✓ — riavvia i server per applicare (Stato → Ferma → Avvia)" : j.error;
   $("#cfgMsg").style.color = j.ok ? "var(--ok)" : "var(--err)";
-};
+  if (j.ok) cfgSnapshot = cfgCurrentJson();   // aggiorna la baseline: niente più "dirty"
+  return j.ok;
+}
+$("#btnCfgReload").onclick = loadConfig;
+$("#btnCfgSave").onclick = saveConfig;
+
+/* dialogo a 3 opzioni quando si lascia le Impostazioni con modifiche pendenti */
+function confirmUnsaved(targetPage) {
+  const ov = $("#modalOverlay");
+  ov.classList.add("on");
+  const close = () => { ov.classList.remove("on"); cleanup(); };
+  const onCancel = () => close();                                  // resta nelle Impostazioni
+  const onDiscard = () => { cfgSnapshot = cfgCurrentJson(); close(); navTo(targetPage); };  // scarta
+  const onSave = async () => { const ok = await saveConfig(); if (ok) { close(); navTo(targetPage); } };
+  function cleanup() {
+    $("#mCancel").onclick = $("#mDiscard").onclick = $("#mSave").onclick = null;
+  }
+  $("#mCancel").onclick = onCancel;
+  $("#mDiscard").onclick = onDiscard;
+  $("#mSave").onclick = onSave;
+}
 
 /* ============ LOG ============ */
 async function loadLogs() {
@@ -1355,5 +1416,17 @@ renderChatList(); renderRecents();
 const h = new Date().getHours();
 $("#helloTxt").textContent = h < 6 ? "Notte fonda, eh?" : h < 13 ? "Buongiorno" : h < 18 ? "Buon pomeriggio" : "Buonasera";
 </script>
+<div id="modalOverlay">
+  <div class="modal">
+    <h3>Modifiche non salvate</h3>
+    <p>Hai modifiche non salvate nelle Impostazioni. Cosa vuoi fare?</p>
+    <div class="mrow">
+      <button id="mCancel">Annulla</button>
+      <button id="mDiscard">Esci senza salvare</button>
+      <button class="primary" id="mSave">Salva ed esci</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
