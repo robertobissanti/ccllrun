@@ -46,7 +46,10 @@ PDF_TEXT_MIN = int(os.environ.get("CCRUN_PDF_TEXT_MIN", "40"))
 # text/image/tool_result sono lato user; tool_use e' lato assistant (le tool call):
 # se NON lo includi, le tool call vengono rimosse e i tool_result restano orfani
 # -> "Tool result message must immediately follow assistant tool use message".
-ALLOWED_BLOCKS = {"text", "image", "tool_use", "tool_result"}
+# tool_reference: usato dalla tool search di Claude Code (ENABLE_TOOL_SEARCH).
+# Il client li manda DENTRO i tool_result (content array) quando "trova" un tool
+# deferito; senza inoltrarli, l'handshake si rompe e la chat resta idle.
+ALLOWED_BLOCKS = {"text", "image", "tool_use", "tool_result", "tool_reference"}
 
 logging.basicConfig(level=logging.INFO, format="[ccrun-proxy] %(message)s")
 log = logging.getLogger("ccrun")
@@ -121,6 +124,14 @@ def sanitize_block(block):
     if btype == "tool_result":
         content = block.get("content")
         if isinstance(content, list):
+            # i tool_reference della tool search vanno preservati come array:
+            # se ce n'e' almeno uno, NON appiattire in stringa (la romperebbe)
+            if any(isinstance(s, dict) and s.get("type") == "tool_reference" for s in content):
+                kept = [s for s in content
+                        if isinstance(s, dict) and s.get("type") in ("text", "tool_reference")]
+                preserved = dict(block)
+                preserved["content"] = kept
+                return [preserved]
             parts = []
             for sub in content:
                 if isinstance(sub, str):

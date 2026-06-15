@@ -199,13 +199,13 @@ Precedenza (dal più debole al più forte): **default interni → `~/.ccllrun/co
 | `extra_big_flags` | — | — | `""` | flag extra per il big, es. `"--mlock --kv-unified"` |
 | `cc_auto_compact_window` | — | — | 115000 | soglia di auto-compact di Claude Code (tienila **sotto `ctx_big`**) |
 | `cc_max_output_tokens` | — | — | 32000 | output massimo di Claude Code |
-| `cc_tool_search` | — | — | `false` | **sperimentale**: attiva la tool search di Claude Code (prefill più veloce con molti server MCP) |
+| `cc_tool_search` | — | — | `false` | attiva la tool search di Claude Code (prefill più veloce con molti server MCP; opzione d'avvio) |
 | `studio_markdown` | — | — | `true` | rendering markdown nella chat di Studio |
 | `studio_autostart` | — | — | `true` | Studio avvia lo stack all'apertura |
 
 > **Perché `cc_auto_compact_window`?** Claude Code assume una finestra da 200k per i modelli non-Anthropic. Su un modello locale con contesto più piccolo riempirebbe oltre il limite mandando la GPU in out-of-memory: questa chiave gli fa compattare la conversazione *prima* del muro.
 
-> **Su `cc_tool_search` (sperimentale).** La tool search di Claude Code (`ENABLE_TOOL_SEARCH`) invia solo pochi tool per richiesta e carica gli altri su richiesta: con molti server MCP collegati il prefill diventa molto più veloce. Si attiva da sola solo su un endpoint first-party Anthropic, quindi dietro un proxy va abilitata a mano. **Attenzione:** la feature si basa sui blocchi `tool_reference` restituiti dal server, e l'attuale `proxy.py` non li inoltra — perciò con l'opzione attiva l'handshake di una tool call può rompersi e lasciare Claude Code in attesa (idle) di un risultato che non si chiude mai. Tienila spenta finché il proxy non inoltra i `tool_reference`. ccllrun imposta `ENABLE_TOOL_SEARCH` di conseguenza, scavalcando quanto presente nel `settings.json` globale.
+> **Su `cc_tool_search`.** La tool search di Claude Code (`ENABLE_TOOL_SEARCH`) invia solo pochi tool per richiesta e carica gli altri su richiesta: con molti server MCP collegati il prefill diventa molto più veloce. Si attiva da sola solo su un endpoint first-party Anthropic, quindi dietro un proxy va abilitata a mano. Il proxy inoltra i blocchi `tool_reference` su cui la feature si basa, quindi funziona end-to-end. Si comporta come **opzione d'avvio**: nella chat di Studio il valore viene congelato al primo turno di una conversazione (cambiarlo a metà romperebbe le tool call in volo), e ccllrun imposta `ENABLE_TOOL_SEARCH` di conseguenza, scavalcando quanto presente nel `settings.json` globale. Default off — attivala se hai molti server MCP e vuoi un prefill più veloce.
 
 ### Variabili d'ambiente del proxy
 

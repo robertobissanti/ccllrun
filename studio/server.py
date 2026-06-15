@@ -241,6 +241,12 @@ async def api_launch(request):
 
 CLAUDE_SEM = asyncio.Semaphore(3)   # max processi claude simultanei dall'API
 
+# ENABLE_TOOL_SEARCH si comporta come opzione DI AVVIO: ogni turno e' un nuovo
+# processo `claude -p`, ma cambiarla a meta' di una conversazione --resume
+# mescolerebbe due stati (le richieste con tool_reference gia' in volo si
+# romperebbero). Congeliamo quindi il valore alla prima richiesta della sessione.
+SESSION_TOOL_SEARCH = {}            # session_id -> bool (valore al primo turno)
+
 # ------------------------------------------- approvazioni interattive (permtool)
 # In headless non c'e' il prompt di Claude Code: `--permission-prompt-tool`
 # fa passare ogni richiesta di permesso da permtool.py (MCP) -> /api/perm/ask.
@@ -337,6 +343,20 @@ async def api_claude(request):
         return web.json_response({"ok": False,
             "error": "proxy fermo: avvia i server da Sistema → Stato"}, status=409)
 
+    # tool search: opzione d'avvio congelata per sessione. Il client invia il
+    # valore bloccato al primo turno (vive nel suo localStorage); in mancanza,
+    # ripieghiamo sul lock lato server per session_id, poi sulla config corrente.
+    if "tool_search" in data:
+        tool_search = bool(data["tool_search"])
+    else:
+        sid = data.get("session_id")
+        if sid and sid in SESSION_TOOL_SEARCH:
+            tool_search = SESSION_TOOL_SEARCH[sid]
+        else:
+            tool_search = bool(cfg.get("cc_tool_search"))
+            if sid:
+                SESSION_TOOL_SEARCH[sid] = tool_search
+
     env = aug_env()
     env.update({
         "ANTHROPIC_BASE_URL": f"http://127.0.0.1:{cfg['proxy_port']}",
@@ -351,9 +371,10 @@ async def api_claude(request):
         # Output basso per lasciare spazio al contesto. Coerente con lo script ccllrun.
         "CLAUDE_CODE_AUTO_COMPACT_WINDOW": str(cfg.get("cc_auto_compact_window", 115000)),
         "CLAUDE_CODE_MAX_OUTPUT_TOKENS": str(cfg.get("cc_max_output_tokens", 32000)),
-        # tool search (vedi cc_tool_search): "1" attiva, "" la disattiva anche se
-        # presente nel settings.json globale. Sperimentale dietro proxy.
-        "ENABLE_TOOL_SEARCH": "1" if cfg.get("cc_tool_search") else "",
+        # tool search (vedi cc_tool_search/SESSION_TOOL_SEARCH): "1" attiva, ""
+        # la disattiva anche se presente nel settings.json globale. Congelata
+        # per sessione: un cambio a meta' conversazione non ha effetto.
+        "ENABLE_TOOL_SEARCH": "1" if tool_search else "",
     })
     perm_mode = data.get("permission_mode") or "acceptEdits"
     cmd = [CLAUDE_BIN, "-p", "--output-format", "stream-json", "--verbose",

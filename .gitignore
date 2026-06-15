@@ -5,3 +5,4 @@ __pycache__/
 # il bundle .app è un artefatto di build (make in studio/)
 studio/ccllrun Studio.app/
 riassunto.md
+*.bak

@@ -1052,13 +1052,18 @@ async function runTurn(s, text) {
   aborter = new AbortController();
   const t0 = performance.now(); let answer = "";
 
+  // tool search: congelata al primo turno della chat (opzione d'avvio: cambiarla
+  // a metà conversazione romperebbe le richieste tool_reference già in volo)
+  if (s.toolSearch === undefined) { s.toolSearch = lastStatus?.config?.cc_tool_search === true; save(); }
+
   try {
     const r = await fetch("/api/claude", { method: "POST",
       headers: { "Content-Type": "application/json", ...HDRS },
       signal: aborter.signal,
       body: JSON.stringify({ prompt: text, cwd: s.dirs[0] || null,
                              add_dirs: s.dirs.slice(1), session_id: s.claudeSid || null,
-                             permission_mode: s.permMode || "acceptEdits" }) });
+                             permission_mode: s.permMode || "acceptEdits",
+                             tool_search: s.toolSearch }) });
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "HTTP " + r.status);
     const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = "";
     for (;;) {
@@ -1235,8 +1240,8 @@ const CFG_SCHEMA = [
   { k: "cc_auto_compact_window", t: "num", l: "Auto-compact window",
     d: "soglia di compattazione (tienila sotto ctx_big per evitare l'OOM Metal)", def: 115000 },
   { k: "cc_max_output_tokens", t: "num", l: "Output massimo", d: "token massimi di output di Claude Code", def: 32000 },
-  { k: "cc_tool_search", t: "switch", l: "Tool search (sperimentale)",
-    d: "prefill più veloce con molti MCP, ma dietro proxy può lasciare la chat idle: il proxy non inoltra ancora i blocchi tool_reference", def: false },
+  { k: "cc_tool_search", t: "switch", l: "Tool search",
+    d: "prefill più veloce con molti MCP (carica i tool on-demand); il proxy ora inoltra i blocchi tool_reference. Vale dalla prossima chat: è un'opzione d'avvio", def: false },
   { sect: "Studio" },
   { k: "studio_markdown", t: "switch", l: "Markdown in chat",
     d: "renderizza le risposte come markdown (titoli, liste, codice, tabelle); spento = testo grezzo", def: true },
