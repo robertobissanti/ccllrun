@@ -31,6 +31,7 @@ import base64
 import json
 import logging
 import os
+import time
 
 from aiohttp import ClientSession, ClientTimeout, web
 
@@ -234,6 +235,22 @@ def anthropic_to_openai(body):
         "messages": messages or [{"role": "user", "content": ""}],
         "stream": bool(body.get("stream")),
     }
+    tools = []
+    for tool in body.get("tools") or []:
+        name = tool.get("name")
+        if not name:
+            continue
+        tools.append({
+            "type": "function",
+            "function": {
+                "name": name,
+                "description": tool.get("description") or "",
+                "parameters": tool.get("input_schema") or {"type": "object", "properties": {}},
+            },
+        })
+    if tools:
+        out["tools"] = tools
+        out["tool_choice"] = "auto"
     for src, dst in (
         ("max_tokens", "max_tokens"),
         ("temperature", "temperature"),
@@ -256,16 +273,54 @@ def openai_message_text(data):
         return ""
 
 
+def parse_tool_arguments(raw):
+    if isinstance(raw, dict):
+        return raw
+    if not isinstance(raw, str) or not raw.strip():
+        return {}
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, dict) else {"value": parsed}
+    except Exception:
+        return {"_raw": raw}
+
+
+def anthropic_tool_id(raw_id, index=0):
+    raw = str(raw_id or "")
+    if raw.startswith("toolu_"):
+        return raw
+    return f"toolu_{raw or f'local_{int(time.time() * 1000)}_{index}'}"
+
+
 def anthropic_message_response(openai_data, model):
-    text = openai_message_text(openai_data)
+    message = {}
+    try:
+        message = openai_data.get("choices", [{}])[0].get("message", {}) or {}
+    except Exception:
+        message = {}
+    content = []
+    text = message.get("content")
+    if isinstance(text, str) and text:
+        content.append({"type": "text", "text": text})
+    for idx, call in enumerate(message.get("tool_calls") or []):
+        fn = call.get("function") or {}
+        content.append({
+            "type": "tool_use",
+            "id": anthropic_tool_id(call.get("id"), idx),
+            "name": fn.get("name") or f"tool_{idx}",
+            "input": parse_tool_arguments(fn.get("arguments")),
+        })
+    if not content:
+        content = [{"type": "text", "text": openai_message_text(openai_data)}]
     usage = openai_data.get("usage") if isinstance(openai_data, dict) else {}
+    stop_reason = "tool_use" if any(c.get("type") == "tool_use" for c in content) else "end_turn"
     return {
         "id": str(openai_data.get("id") or "msg_local"),
         "type": "message",
         "role": "assistant",
         "model": model,
-        "content": [{"type": "text", "text": text}],
-        "stop_reason": "end_turn",
+        "content": content,
+        "stop_reason": stop_reason,
         "stop_sequence": None,
         "usage": {
             "input_tokens": int((usage or {}).get("prompt_tokens") or 0),
@@ -276,6 +331,19 @@ def anthropic_message_response(openai_data, model):
 
 def sse(event, data):
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode()
+
+
+def openai_tool_delta_state(tool_calls, delta_calls):
+    for call in delta_calls or []:
+        idx = int(call.get("index") or 0)
+        state = tool_calls.setdefault(idx, {"id": "", "name": "", "arguments": ""})
+        if call.get("id"):
+            state["id"] += str(call.get("id"))
+        fn = call.get("function") or {}
+        if fn.get("name"):
+            state["name"] += str(fn.get("name"))
+        if fn.get("arguments"):
+            state["arguments"] += str(fn.get("arguments"))
 
 
 # --------------------------------------------------------------------------- #
@@ -343,11 +411,10 @@ async def handle(request):
                                         "stop_sequence": None,
                                         "usage": {"input_tokens": 0, "output_tokens": 0}},
                         }))
-                        await resp.write(sse("content_block_start", {
-                            "type": "content_block_start", "index": 0,
-                            "content_block": {"type": "text", "text": ""},
-                        }))
                         pending = ""
+                        content_index = 0
+                        text_started = False
+                        tool_calls = {}
                         async for raw in upstream.content:
                             pending += raw.decode(errors="replace")
                             lines = pending.splitlines()
@@ -360,18 +427,53 @@ async def handle(request):
                                     continue
                                 try:
                                     chunk = json.loads(payload)
-                                    delta = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                                    delta_obj = chunk.get("choices", [{}])[0].get("delta", {}) or {}
+                                    delta = delta_obj.get("content", "")
+                                    openai_tool_delta_state(tool_calls, delta_obj.get("tool_calls"))
                                 except Exception:
                                     delta = ""
                                 if delta:
+                                    if not text_started:
+                                        await resp.write(sse("content_block_start", {
+                                            "type": "content_block_start", "index": content_index,
+                                            "content_block": {"type": "text", "text": ""},
+                                        }))
+                                        text_started = True
                                     await resp.write(sse("content_block_delta", {
-                                        "type": "content_block_delta", "index": 0,
+                                        "type": "content_block_delta", "index": content_index,
                                         "delta": {"type": "text_delta", "text": delta},
                                     }))
-                        await resp.write(sse("content_block_stop", {"type": "content_block_stop", "index": 0}))
+                        if text_started:
+                            await resp.write(sse("content_block_stop", {
+                                "type": "content_block_stop", "index": content_index,
+                            }))
+                            content_index += 1
+                        for idx in sorted(tool_calls):
+                            call = tool_calls[idx]
+                            await resp.write(sse("content_block_start", {
+                                "type": "content_block_start", "index": content_index,
+                                "content_block": {
+                                    "type": "tool_use",
+                                    "id": anthropic_tool_id(call.get("id"), idx),
+                                    "name": call.get("name") or f"tool_{idx}",
+                                    "input": {},
+                                },
+                            }))
+                            await resp.write(sse("content_block_delta", {
+                                "type": "content_block_delta", "index": content_index,
+                                "delta": {
+                                    "type": "input_json_delta",
+                                    "partial_json": call.get("arguments") or "{}",
+                                },
+                            }))
+                            await resp.write(sse("content_block_stop", {
+                                "type": "content_block_stop", "index": content_index,
+                            }))
+                            content_index += 1
+                        stop_reason = "tool_use" if tool_calls else "end_turn"
                         await resp.write(sse("message_delta", {
                             "type": "message_delta",
-                            "delta": {"stop_reason": "end_turn", "stop_sequence": None},
+                            "delta": {"stop_reason": stop_reason, "stop_sequence": None},
                             "usage": {"output_tokens": 0},
                         }))
                         await resp.write(sse("message_stop", {"type": "message_stop"}))
