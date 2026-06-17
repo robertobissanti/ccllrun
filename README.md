@@ -182,7 +182,7 @@ Precedence (weakest to strongest): **built-in defaults → `~/.ccllrun/config.js
 |---|---|---|---|---|
 | `big_gguf` | `ccllrun_GGUF_BIG` | `--big-gguf` | Qwen3.6-35B-A3B Q4_K_XL | main model |
 | `small_gguf` | `ccllrun_GGUF_SMALL` | `--small-gguf` | history-9b Q4_K_M | fast model (`""` to disable) |
-| `backend` | `ccllrun_BACKEND` | `--backend` | `llama.cpp` | runtime backend (`llama.cpp`; `mlx-lm` requires a dedicated adapter) |
+| `backend` | `ccllrun_BACKEND` | `--backend` | `llama.cpp` | runtime backend (`llama.cpp` for GGUF, `mlx-lm` for MLX directories) |
 | `big_mlx` | `ccllrun_MLX_BIG` | `--big-mlx` | `""` | main MLX model directory |
 | `small_mlx` | `ccllrun_MLX_SMALL` | `--small-mlx` | `""` | fast MLX model directory |
 | `no_small` | — | `--no-small` | `false` | don't start the small model |

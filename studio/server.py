@@ -203,18 +203,25 @@ async def api_status(request):
     ]
 
     big_port, small_port, proxy_port = (int(cfg.get(k, DEFAULTS[k])) for k in ("big_port", "small_port", "proxy_port"))
-    big_health, big_props = await asyncio.gather(
-        http_json(f"http://127.0.0.1:{big_port}/health"),
-        http_json(f"http://127.0.0.1:{big_port}/props"),
-    )
-    small_health = await http_json(f"http://127.0.0.1:{small_port}/health")
+    if backend == "mlx-lm":
+        big_health, big_props = await asyncio.gather(
+            http_json(f"http://127.0.0.1:{big_port}/v1/models"),
+            asyncio.sleep(0, result=None),
+        )
+        small_health = await http_json(f"http://127.0.0.1:{small_port}/v1/models")
+    else:
+        big_health, big_props = await asyncio.gather(
+            http_json(f"http://127.0.0.1:{big_port}/health"),
+            http_json(f"http://127.0.0.1:{big_port}/props"),
+        )
+        small_health = await http_json(f"http://127.0.0.1:{small_port}/health")
     proxy_up = await http_json(f"http://127.0.0.1:{proxy_port}/v1/models") is not None
 
     servers = {
         "big": {"up": big_health is not None, "port": big_port, "alias": cfg.get("model_big"),
                 "pid": pid_alive("llama-big.pid"),
                 "ctx": (big_props or {}).get("default_generation_settings", {}).get("n_ctx"),
-                "model_path": (big_props or {}).get("model_path") or big_gguf},
+                "model_path": (big_props or {}).get("model_path") or (big_mlx if backend == "mlx-lm" else big_gguf)},
         "small": {"up": small_health is not None, "port": small_port, "alias": cfg.get("model_small"),
                   "pid": pid_alive("llama-small.pid")},
         "proxy": {"up": proxy_up, "port": proxy_port, "pid": pid_alive("proxy.pid")},

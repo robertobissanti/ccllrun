@@ -209,68 +209,98 @@ if ! grep -q 'CLAUDE_CODE_ATTRIBUTION_HEADER' "$HOME/.claude/settings.json" 2>/d
 fi
 
 health() { curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$1/health" 2>/dev/null; }
+openai_health() { curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$1/v1/models" 2>/dev/null; }
+mkdir -p "$CC_DIR"
 
 if [[ "$BACKEND" == "mlx-lm" ]]; then
-  echo "[ccllrun] backend mlx-lm configurato." >&2
-  echo "[ccllrun] I modelli MLX vanno indicati come cartelle (big_mlx/small_mlx), per esempio:" >&2
-  echo "[ccllrun]   $BIG_MLX" >&2
-  echo "[ccllrun] Integrazione runtime non ancora attivata: mlx_lm.server espone /v1/chat/completions," >&2
-  echo "[ccllrun] mentre Claude Code passa da /v1/messages. Serve l'adapter Anthropic->OpenAI prima dell'avvio." >&2
-  exit 2
+  if [[ -z "$BIG_MLX" || ! -d "$BIG_MLX" ]]; then
+    echo "[ccllrun] cartella MLX big non trovata: ${BIG_MLX:-'(vuota)'}" >&2
+    exit 1
+  fi
 elif [[ "$BACKEND" != "llama.cpp" ]]; then
   echo "[ccllrun] backend non valido: $BACKEND (usa llama.cpp oppure mlx-lm)" >&2
   exit 2
 fi
 
-# ---------- mmproj autodetect ----------
-if [[ -z "$MMPROJ" ]]; then
-  for cand in "$(dirname "$BIG_GGUF")"/mmproj-*.gguf; do
-    [[ -f "$cand" ]] && MMPROJ="$cand" && break
-  done
-fi
-MMPROJ_FLAGS=()
-[[ -n "$MMPROJ" && "$MMPROJ" != "off" && -f "$MMPROJ" ]] && MMPROJ_FLAGS=(--mmproj "$MMPROJ")
-
-# ---------- BIG ----------
-if [[ "$(health "$BIG_PORT")" != "200" ]]; then
-  if [[ ! -f "$BIG_GGUF" ]]; then
-    echo "[ccllrun] GGUF non trovato: $BIG_GGUF" >&2
-    exit 1
+if [[ "$BACKEND" == "mlx-lm" ]]; then
+  # ---------- BIG MLX ----------
+  if [[ "$(openai_health "$BIG_PORT")" != "200" ]]; then
+    echo "[ccllrun] avvio $MODEL_BIG MLX su :$BIG_PORT..."
+    nohup "$MLX_BIN" --model "$BIG_MLX" --host 127.0.0.1 --port "$BIG_PORT" \
+      >> "$CC_DIR/llama-big.log" 2>&1 &
+    echo $! > "$CC_DIR/llama-big.pid"
+    for _ in $(seq 1 600); do
+      [[ "$(openai_health "$BIG_PORT")" == "200" ]] && break
+      sleep 1
+    done
+    if [[ "$(openai_health "$BIG_PORT")" != "200" ]]; then
+      echo "[ccllrun] $MODEL_BIG MLX non pronto, vedi $CC_DIR/llama-big.log" >&2
+      exit 1
+    fi
   fi
-  MTP_FLAGS=()
-  case "$(echo "$BIG_GGUF" | tr '[:lower:]' '[:upper:]')" in
-    *MTP*) MTP_FLAGS=(--spec-type draft-mtp --spec-draft-n-max 2) ;;
-  esac
-  echo "[ccllrun] avvio $MODEL_BIG su :$BIG_PORT (ctx=$CTX_BIG kv=$KV_TYPE mmproj=${MMPROJ:-no})..."
-  # shellcheck disable=SC2086
-  nohup "$LLAMA_BIN" --model "$BIG_GGUF" --alias "$MODEL_BIG" \
-    --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0 \
-    "${MTP_FLAGS[@]}" ${MMPROJ_FLAGS[@]+"${MMPROJ_FLAGS[@]}"} \
-    --ctx-size "$CTX_BIG" -b "$BATCH" -ub "$BATCH" -fa on -ngl "$NGL" \
-    --cache-type-k "$KV_TYPE" --cache-type-v "$KV_TYPE" \
-    --cache-reuse 256 --port "$BIG_PORT" --parallel "$PARALLEL" \
-    --reasoning-budget "$REASONING_BUDGET" --presence-penalty "$PRESENCE_PENALTY" \
-    $EXTRA_BIG_FLAGS \
-    >> "$CC_DIR/llama-big.log" 2>&1 &
-  echo $! > "$CC_DIR/llama-big.pid"
-  for _ in $(seq 1 600); do
-    [[ "$(health "$BIG_PORT")" == "200" ]] && break
-    sleep 1
-  done
+
+  # ---------- SMALL MLX ----------
+  if [[ "$NO_SMALL" != "1" && -n "$SMALL_MLX" && "$SMALL_MLX" != "$BIG_MLX" && "$(openai_health "$SMALL_PORT")" != "200" ]]; then
+    if [[ ! -d "$SMALL_MLX" ]]; then
+      echo "[ccllrun] cartella MLX small non trovata: $SMALL_MLX" >&2
+      exit 1
+    fi
+    echo "[ccllrun] avvio $MODEL_SMALL MLX su :$SMALL_PORT..."
+    nohup "$MLX_BIN" --model "$SMALL_MLX" --host 127.0.0.1 --port "$SMALL_PORT" \
+      >> "$CC_DIR/llama-small.log" 2>&1 &
+    echo $! > "$CC_DIR/llama-small.pid"
+  fi
+else
+  # ---------- mmproj autodetect ----------
+  if [[ -z "$MMPROJ" ]]; then
+    for cand in "$(dirname "$BIG_GGUF")"/mmproj-*.gguf; do
+      [[ -f "$cand" ]] && MMPROJ="$cand" && break
+    done
+  fi
+  MMPROJ_FLAGS=()
+  [[ -n "$MMPROJ" && "$MMPROJ" != "off" && -f "$MMPROJ" ]] && MMPROJ_FLAGS=(--mmproj "$MMPROJ")
+
+  # ---------- BIG ----------
   if [[ "$(health "$BIG_PORT")" != "200" ]]; then
-    echo "[ccllrun] $MODEL_BIG non pronto, vedi $CC_DIR/llama-big.log" >&2
-    exit 1
+    if [[ ! -f "$BIG_GGUF" ]]; then
+      echo "[ccllrun] GGUF non trovato: $BIG_GGUF" >&2
+      exit 1
+    fi
+    MTP_FLAGS=()
+    case "$(echo "$BIG_GGUF" | tr '[:lower:]' '[:upper:]')" in
+      *MTP*) MTP_FLAGS=(--spec-type draft-mtp --spec-draft-n-max 2) ;;
+    esac
+    echo "[ccllrun] avvio $MODEL_BIG su :$BIG_PORT (ctx=$CTX_BIG kv=$KV_TYPE mmproj=${MMPROJ:-no})..."
+    # shellcheck disable=SC2086
+    nohup "$LLAMA_BIN" --model "$BIG_GGUF" --alias "$MODEL_BIG" \
+      --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0 \
+      "${MTP_FLAGS[@]}" ${MMPROJ_FLAGS[@]+"${MMPROJ_FLAGS[@]}"} \
+      --ctx-size "$CTX_BIG" -b "$BATCH" -ub "$BATCH" -fa on -ngl "$NGL" \
+      --cache-type-k "$KV_TYPE" --cache-type-v "$KV_TYPE" \
+      --cache-reuse 256 --port "$BIG_PORT" --parallel "$PARALLEL" \
+      --reasoning-budget "$REASONING_BUDGET" --presence-penalty "$PRESENCE_PENALTY" \
+      $EXTRA_BIG_FLAGS \
+      >> "$CC_DIR/llama-big.log" 2>&1 &
+    echo $! > "$CC_DIR/llama-big.pid"
+    for _ in $(seq 1 600); do
+      [[ "$(health "$BIG_PORT")" == "200" ]] && break
+      sleep 1
+    done
+    if [[ "$(health "$BIG_PORT")" != "200" ]]; then
+      echo "[ccllrun] $MODEL_BIG non pronto, vedi $CC_DIR/llama-big.log" >&2
+      exit 1
+    fi
   fi
-fi
 
-# ---------- SMALL ----------
-if [[ "$NO_SMALL" != "1" && -n "$SMALL_GGUF" && "$SMALL_GGUF" != "$BIG_GGUF" && "$(health "$SMALL_PORT")" != "200" ]]; then
-  echo "[ccllrun] avvio $MODEL_SMALL su :$SMALL_PORT..."
-  nohup "$LLAMA_BIN" --model "$SMALL_GGUF" --alias "$MODEL_SMALL" \
-    --ctx-size "$CTX_SMALL" -b "$BATCH" -ub "$BATCH" -fa on -ngl "$NGL" \
-    --cache-reuse 256 --port "$SMALL_PORT" \
-    >> "$CC_DIR/llama-small.log" 2>&1 &
-  echo $! > "$CC_DIR/llama-small.pid"
+  # ---------- SMALL ----------
+  if [[ "$NO_SMALL" != "1" && -n "$SMALL_GGUF" && "$SMALL_GGUF" != "$BIG_GGUF" && "$(health "$SMALL_PORT")" != "200" ]]; then
+    echo "[ccllrun] avvio $MODEL_SMALL su :$SMALL_PORT..."
+    nohup "$LLAMA_BIN" --model "$SMALL_GGUF" --alias "$MODEL_SMALL" \
+      --ctx-size "$CTX_SMALL" -b "$BATCH" -ub "$BATCH" -fa on -ngl "$NGL" \
+      --cache-reuse 256 --port "$SMALL_PORT" \
+      >> "$CC_DIR/llama-small.log" 2>&1 &
+    echo $! > "$CC_DIR/llama-small.pid"
+  fi
 fi
 
 # ---------- proxy + claude ----------
@@ -294,7 +324,11 @@ if [[ ! -x "$VENV/bin/python" ]]; then
 fi
 
 SMALL_UPSTREAM=""
-[[ "$NO_SMALL" != "1" && -n "$SMALL_GGUF" && "$SMALL_GGUF" != "$BIG_GGUF" ]] && SMALL_UPSTREAM="http://127.0.0.1:$SMALL_PORT"
+if [[ "$BACKEND" == "mlx-lm" ]]; then
+  [[ "$NO_SMALL" != "1" && -n "$SMALL_MLX" && "$SMALL_MLX" != "$BIG_MLX" ]] && SMALL_UPSTREAM="http://127.0.0.1:$SMALL_PORT"
+else
+  [[ "$NO_SMALL" != "1" && -n "$SMALL_GGUF" && "$SMALL_GGUF" != "$BIG_GGUF" ]] && SMALL_UPSTREAM="http://127.0.0.1:$SMALL_PORT"
+fi
 
 # non avviare un secondo proxy se ce n'è già uno sulla porta (il doppione
 # morirebbe subito lasciando un pidfile marcio)
@@ -302,6 +336,7 @@ PROXY_PID=""
 if ! curl -s -o /dev/null "http://127.0.0.1:$PORT/v1/models" 2>/dev/null; then
   CCRUN_UPSTREAM="http://127.0.0.1:$BIG_PORT" \
   CCRUN_UPSTREAM_SMALL="$SMALL_UPSTREAM" \
+  CCRUN_UPSTREAM_API="$([[ "$BACKEND" == "mlx-lm" ]] && echo openai || echo anthropic)" \
   CCRUN_SMALL_NAME="$MODEL_SMALL" \
   CCRUN_PROXY_PORT="$PORT" \
   CCRUN_PDF_MODE="$PDF_MODE" \

@@ -19,6 +19,7 @@ Everything else is proxied transparently (streaming preserved).
 
 Env vars (all optional):
   CCRUN_UPSTREAM        upstream base URL          (default http://127.0.0.1:1234)
+  CCRUN_UPSTREAM_API    anthropic | openai        (default anthropic)
   CCRUN_PROXY_PORT      port to listen on          (default 8765)
   CCRUN_PDF_MODE        text | image | hybrid      (default hybrid)
   CCRUN_PDF_MAX_PAGES   max pages when rasterizing (default 10)
@@ -35,6 +36,7 @@ from aiohttp import ClientSession, ClientTimeout, web
 
 UPSTREAM = os.environ.get("CCRUN_UPSTREAM", "http://127.0.0.1:1234").rstrip("/")
 UPSTREAM_SMALL = os.environ.get("CCRUN_UPSTREAM_SMALL", "").rstrip("/")
+UPSTREAM_API = os.environ.get("CCRUN_UPSTREAM_API", "anthropic").lower()
 SMALL_NAME = os.environ.get("CCRUN_SMALL_NAME", "small-fast")
 PORT = int(os.environ.get("CCRUN_PROXY_PORT", "8765"))
 PDF_MODE = os.environ.get("CCRUN_PDF_MODE", "hybrid").lower()
@@ -185,6 +187,97 @@ def transform_body(body):
     return body
 
 
+def block_text(block):
+    if isinstance(block, str):
+        return block
+    if not isinstance(block, dict):
+        return str(block)
+    btype = block.get("type")
+    if btype == "text":
+        return block.get("text", "")
+    if btype == "tool_result":
+        return "[tool_result]\n" + str(block.get("content", ""))
+    if btype == "tool_use":
+        return "[tool_use]\n" + json.dumps(block, ensure_ascii=False)
+    if btype == "image":
+        return "[image input omitted: upstream OpenAI-compatible MLX server is text-only]"
+    return f"[{btype or 'block'} omitted]"
+
+
+def content_text(content):
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(block_text(block) for block in content).strip()
+    return "" if content is None else str(content)
+
+
+def anthropic_to_openai(body):
+    body = transform_body(body)
+    messages = []
+    system = body.get("system")
+    if isinstance(system, str) and system.strip():
+        messages.append({"role": "system", "content": system})
+    elif isinstance(system, list):
+        text = content_text(system)
+        if text:
+            messages.append({"role": "system", "content": text})
+
+    for msg in body.get("messages") or []:
+        role = msg.get("role") or "user"
+        if role not in {"system", "user", "assistant"}:
+            role = "user"
+        messages.append({"role": role, "content": content_text(msg.get("content"))})
+
+    out = {
+        "model": body.get("model") or "local",
+        "messages": messages or [{"role": "user", "content": ""}],
+        "stream": bool(body.get("stream")),
+    }
+    for src, dst in (
+        ("max_tokens", "max_tokens"),
+        ("temperature", "temperature"),
+        ("top_p", "top_p"),
+        ("top_k", "top_k"),
+        ("stop_sequences", "stop"),
+        ("stop", "stop"),
+    ):
+        if src in body:
+            out[dst] = body[src]
+    return out
+
+
+def openai_message_text(data):
+    try:
+        msg = data.get("choices", [{}])[0].get("message", {})
+        content = msg.get("content", "")
+        return content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)
+    except Exception:
+        return ""
+
+
+def anthropic_message_response(openai_data, model):
+    text = openai_message_text(openai_data)
+    usage = openai_data.get("usage") if isinstance(openai_data, dict) else {}
+    return {
+        "id": str(openai_data.get("id") or "msg_local"),
+        "type": "message",
+        "role": "assistant",
+        "model": model,
+        "content": [{"type": "text", "text": text}],
+        "stop_reason": "end_turn",
+        "stop_sequence": None,
+        "usage": {
+            "input_tokens": int((usage or {}).get("prompt_tokens") or 0),
+            "output_tokens": int((usage or {}).get("completion_tokens") or 0),
+        },
+    }
+
+
+def sse(event, data):
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode()
+
+
 # --------------------------------------------------------------------------- #
 # Proxy plumbing
 # --------------------------------------------------------------------------- #
@@ -195,25 +288,92 @@ RESP_SKIP = {"content-length", "transfer-encoding", "content-encoding", "connect
 async def handle(request):
     body = await request.read()
     target = UPSTREAM
+    path_qs = request.path_qs
+    openai_mode = UPSTREAM_API == "openai"
+    model = "local"
 
     if request.method == "POST" and request.path.endswith("/v1/messages"):
         try:
             data = json.loads(body)
+            model = str(data.get("model") or model)
             if UPSTREAM_SMALL and str(data.get("model", "")).startswith(SMALL_NAME):
                 target = UPSTREAM_SMALL
-            body = json.dumps(transform_body(data)).encode()
+            if openai_mode:
+                path_qs = "/v1/chat/completions"
+                body = json.dumps(anthropic_to_openai(data)).encode()
+            else:
+                body = json.dumps(transform_body(data)).encode()
         except Exception as exc:
             log.warning("transform saltato (%s), inoltro grezzo", exc)
 
     headers = {k: v for k, v in request.headers.items()
                if k.lower() not in HOP_BY_HOP}
-    url = target + request.path_qs
+    if openai_mode:
+        headers["content-type"] = "application/json"
+    url = target + path_qs
 
     timeout = ClientTimeout(total=None, sock_connect=30)
     try:
         async with ClientSession(timeout=timeout) as session:
             async with session.request(request.method, url, data=body,
                                        headers=headers) as upstream:
+                if openai_mode and request.method == "POST" and request.path.endswith("/v1/messages"):
+                    if upstream.status >= 400:
+                        data = await upstream.read()
+                        return web.Response(status=upstream.status, body=data, headers={
+                            k: v for k, v in upstream.headers.items() if k.lower() not in RESP_SKIP
+                        })
+                    if upstream.headers.get("content-type", "").startswith("text/event-stream"):
+                        resp = web.StreamResponse(status=200, headers={
+                            "content-type": "text/event-stream; charset=utf-8",
+                            "cache-control": "no-cache",
+                        })
+                        await resp.prepare(request)
+                        await resp.write(sse("message_start", {
+                            "type": "message_start",
+                            "message": {"id": "msg_local", "type": "message", "role": "assistant",
+                                        "model": model, "content": [], "stop_reason": None,
+                                        "stop_sequence": None,
+                                        "usage": {"input_tokens": 0, "output_tokens": 0}},
+                        }))
+                        await resp.write(sse("content_block_start", {
+                            "type": "content_block_start", "index": 0,
+                            "content_block": {"type": "text", "text": ""},
+                        }))
+                        pending = ""
+                        async for raw in upstream.content:
+                            pending += raw.decode(errors="replace")
+                            lines = pending.splitlines()
+                            pending = "" if pending.endswith(("\n", "\r")) else (lines.pop() if lines else pending)
+                            for line in lines:
+                                if not line.startswith("data:"):
+                                    continue
+                                payload = line[5:].strip()
+                                if not payload or payload == "[DONE]":
+                                    continue
+                                try:
+                                    chunk = json.loads(payload)
+                                    delta = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                                except Exception:
+                                    delta = ""
+                                if delta:
+                                    await resp.write(sse("content_block_delta", {
+                                        "type": "content_block_delta", "index": 0,
+                                        "delta": {"type": "text_delta", "text": delta},
+                                    }))
+                        await resp.write(sse("content_block_stop", {"type": "content_block_stop", "index": 0}))
+                        await resp.write(sse("message_delta", {
+                            "type": "message_delta",
+                            "delta": {"stop_reason": "end_turn", "stop_sequence": None},
+                            "usage": {"output_tokens": 0},
+                        }))
+                        await resp.write(sse("message_stop", {"type": "message_stop"}))
+                        await resp.write_eof()
+                        return resp
+
+                    data = await upstream.json(content_type=None)
+                    return web.json_response(anthropic_message_response(data, model), status=upstream.status)
+
                 resp_headers = {k: v for k, v in upstream.headers.items()
                                 if k.lower() not in RESP_SKIP}
                 resp = web.StreamResponse(status=upstream.status, headers=resp_headers)
