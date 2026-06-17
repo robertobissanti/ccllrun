@@ -468,7 +468,7 @@
   .formatBox label { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--dim); }
   .formatBox input { min-width: 0; width: auto; flex: 0 0 auto; accent-color: var(--accent); }
   .modelLayout { display: grid; grid-template-columns: minmax(280px, 390px) 1fr; gap: 14px; align-items: start; }
-  .modelList, .fileList { display: grid; gap: 8px; }
+  .modelList, .fileList, .optionList { display: grid; gap: 8px; }
   .modelItem, .fileItem, .downloadItem { background: var(--panel); border: 1px solid var(--border);
                                          border-radius: 10px; padding: 11px 12px; }
   .modelItem { cursor: pointer; }
@@ -477,6 +477,28 @@
   .modelItem .meta, .fileItem .meta, .downloadItem .meta { color: var(--dim); font: 11px var(--mono); margin-top: 5px; }
   .fileItem .row, .downloadItem .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 9px; }
   .fileItem button, .downloadItem button { padding: 6px 10px; font-size: 12px; border-radius: 8px; }
+  .modelDetail { display: grid; gap: 12px; }
+  .detailHero { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .detailHero h2 { font-size: 24px; margin-bottom: 12px; word-break: break-word; }
+  .detailMeta { display: flex; gap: 9px; flex-wrap: wrap; color: var(--dim); font-size: 12px; }
+  .pill { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border);
+          border-radius: 8px; padding: 3px 8px; color: var(--text); background: var(--panel2); font: 12px var(--mono); }
+  .pill.fmt { color: #fff; background: #407bff; border-color: #407bff; }
+  .pill.mlx { color: #202124; background: linear-gradient(#d7dce3, #9da6b3); border-color: #b7bec8; }
+  .downloadPanel, .readmePanel, .morePanel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .panelHead { padding: 12px 14px; border-bottom: 1px solid var(--border); font-weight: 700; }
+  .downloadOption { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 12px;
+                    padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  .downloadOption:last-child { border-bottom: none; }
+  .downloadOption .name { font: 13px var(--mono); word-break: break-word; }
+  .downloadOption .size { color: var(--dim); font: 12px var(--mono); white-space: nowrap; }
+  .downloadOption button { padding: 6px 12px; border-radius: 8px; }
+  .readmeBody { padding: 16px 20px; max-height: 460px; overflow: auto; }
+  .readmeBody h1, .readmeBody h2, .readmeBody h3 { margin: 12px 0 8px; }
+  .readmeBody p { margin: 8px 0; }
+  .moreRow { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-top: 1px solid var(--border); cursor: pointer; }
+  .moreRow:hover { background: var(--panel2); }
+  .moreRow .nm { flex: 1; font-weight: 600; }
   .bar { height: 7px; background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-top: 8px; }
   .bar span { display: block; height: 100%; width: 0; background: var(--accent); }
   @media (max-width: 920px) { .modelLayout { grid-template-columns: 1fr; } }
@@ -699,7 +721,8 @@
     <div class="modelLayout">
       <div class="modelList" id="modelList"></div>
       <div>
-        <div class="fileList" id="fileList"></div>
+        <div class="modelDetail" id="modelDetail"></div>
+        <div class="fileList" id="fileList" style="display:none"></div>
         <h1 style="font-size:16px;margin-top:18px">Download</h1>
         <div class="fileList" id="downloadList"></div>
       </div>
@@ -873,7 +896,7 @@ function navTo(page) {
 }
 
 /* ============ download modelli Hugging Face ============ */
-let modelResults = [], selectedModel = "", modelFiles = [], downloadTimer = null;
+let modelResults = [], selectedModel = "", selectedInfo = null, modelFiles = [], downloadTimer = null;
 function modelFormats() {
   const f = [];
   if ($("#fmtGguf")?.checked) f.push("gguf");
@@ -892,7 +915,7 @@ const fmtBytes = b => {
 async function searchModels() {
   const q = $("#modelQuery").value.trim();
   $("#modelMsg").textContent = "ricerca modelli…";
-  $("#modelList").innerHTML = ""; $("#fileList").innerHTML = "";
+  $("#modelList").innerHTML = ""; $("#modelDetail").innerHTML = ""; $("#fileList").innerHTML = "";
   try {
     const j = await fetchJson(apiUrl("/api/models/search", { q, formats: modelFormats() }));
     modelResults = j.models || [];
@@ -915,38 +938,78 @@ function renderModels() {
 }
 
 async function loadModelFiles(repo) {
-  selectedModel = repo; modelFiles = []; renderModels();
-  $("#fileList").innerHTML = `<div class="sub">lettura file…</div>`;
+  selectedModel = repo; selectedInfo = null; modelFiles = []; renderModels();
+  $("#modelDetail").innerHTML = `<div class="sub">lettura modello…</div>`;
   try {
-    const j = await fetchJson(apiUrl("/api/models/files", { repo, formats: modelFormats() }));
-    modelFiles = j.files || [];
+    const [fj, ij] = await Promise.all([
+      fetchJson(apiUrl("/api/models/files", { repo, formats: modelFormats() })),
+      fetchJson(apiUrl("/api/models/info", { repo })).catch(() => null),
+    ]);
+    modelFiles = fj.files || [];
+    selectedInfo = ij;
   } catch (e) {
-    $("#fileList").innerHTML = `<div class="sub">errore: ${esc(e.message)}</div>`;
+    $("#modelDetail").innerHTML = `<div class="sub">errore: ${esc(e.message)}</div>`;
     return;
   }
   renderModelFiles();
 }
 
+function optionLabel(files) {
+  const first = files[0] || {};
+  const path = first.path || selectedModel;
+  return path.replace(/\.(gguf|safetensors|json|txt|model)$/i, "")
+    .replace(/[-_/]+/g, " ").replace(/\b(UD|GGUF|MLX)\b/gi, "").trim() || selectedModel.split("/").pop();
+}
+
+function modelOptions() {
+  const gguf = modelFiles.filter(f => f.format === "gguf").map(f => ({ format: "gguf", files: [f], size: f.size, label: optionLabel([f]), downloaded: f.downloaded }));
+  const mlxFiles = modelFiles.filter(f => f.format === "mlx");
+  const mlx = mlxFiles.length ? [{ format: "mlx", files: mlxFiles, size: mlxFiles.reduce((a, f) => a + (f.size || 0), 0), label: optionLabel(mlxFiles), downloaded: mlxFiles.every(f => f.downloaded) }] : [];
+  return [...gguf, ...mlx].sort((a, b) => a.size - b.size);
+}
+
+function tagVal(tags, prefix) {
+  const t = (tags || []).find(x => String(x).startsWith(prefix));
+  return t ? String(t).slice(prefix.length) : "";
+}
+
+function renderReadme(md) {
+  if (!md) return `<div class="sub">README non disponibile.</div>`;
+  return mdToHtml(md.replace(/^---[\s\S]*?---\s*/, "").slice(0, 7000));
+}
+
 function renderModelFiles() {
-  const hasMlx = modelFiles.some(f => f.format === "mlx");
-  $("#fileList").innerHTML = `${hasMlx ? `<div class="fileItem"><div class="name">Repository MLX</div><div class="meta">Scarica tutti i file necessari mantenendo la struttura del repository.</div><div class="row"><button class="primary" id="btnDownloadAllMlx">Scarica tutti MLX</button></div></div>` : ""}` + modelFiles.map((f, i) => `
-    <div class="fileItem">
-      <div class="name">${esc(f.path)}</div>
-      <div class="meta">${esc((f.format || "").toUpperCase())} · ${fmtBytes(f.size)}${f.downloaded ? " · già presente" : ""}</div>
-      <div class="meta">${esc(f.local)}</div>
-      <div class="row">
-        <button class="primary" data-dl="${i}">${f.downloaded ? "Riscarica" : "Scarica"}</button>
-        ${f.downloaded ? `<button data-apply="big:${i}">Usa come big</button><button data-apply="small:${i}">Usa come small</button>` : ""}
+  const meta = selectedInfo?.meta || {};
+  const tags = meta.tags || modelResults.find(m => m.id === selectedModel)?.tags || [];
+  const opts = modelOptions();
+  const formats = [...new Set(opts.map(o => o.format))];
+  $("#modelDetail").innerHTML = `
+    <div class="detailHero">
+      <h2>${esc(selectedModel)}</h2>
+      <div class="detailMeta">
+        <span class="pill">↓ ${Number(meta.downloads || 0).toLocaleString()}</span>
+        <span class="pill">☆ ${Number(meta.likes || 0).toLocaleString()}</span>
+        ${tagVal(tags, "base_model:") ? `<span class="pill">${esc(tagVal(tags, "base_model:").split("/").pop())}</span>` : ""}
+        ${formats.map(f => `<span class="pill fmt ${f === "mlx" ? "mlx" : ""}">${f.toUpperCase()}</span>`).join("")}
       </div>
-    </div>`).join("") || `<div class="sub">Nessun file per i formati selezionati.</div>`;
-  $("#btnDownloadAllMlx")?.addEventListener("click", () => modelFiles.filter(f => f.format === "mlx").forEach(startDownload));
-  $("#fileList").querySelectorAll("button[data-dl]").forEach(btn => btn.onclick = () => startDownload(modelFiles[+btn.dataset.dl]));
-  $("#fileList").querySelectorAll("button[data-apply]").forEach(btn => {
-    btn.onclick = () => {
-      const [role, idx] = btn.dataset.apply.split(":");
-      applyModel(role, modelFiles[+idx].local);
-    };
-  });
+    </div>
+    <div class="downloadPanel">
+      <div class="panelHead">Download Options</div>
+      <div class="optionList">${opts.map((o, i) => `
+        <div class="downloadOption">
+          <span class="pill fmt ${o.format === "mlx" ? "mlx" : ""}">${o.format.toUpperCase()}</span>
+          <span class="name">${esc(o.label)}</span>
+          <span class="size">${fmtBytes(o.size)}</span>
+          <button class="primary" data-opt="${i}">${o.downloaded ? "Riscarica" : "Download"}</button>
+        </div>`).join("") || `<div class="sub" style="padding:14px">Nessuna opzione per i formati selezionati.</div>`}</div>
+    </div>
+    <div class="readmePanel"><div class="panelHead">README</div><div class="readmeBody md">${renderReadme(selectedInfo?.readme || "")}</div></div>
+    <div class="morePanel"><div class="panelHead">More from ${esc(selectedModel.split("/")[0] || "")}</div>
+      ${(selectedInfo?.siblings || []).map(s => `<div class="moreRow" data-more="${esc(s.id)}"><span class="nm">${esc(s.id.split("/").pop())}</span><span class="meta">↓ ${Number(s.downloads || 0).toLocaleString()} · ☆ ${Number(s.likes || 0).toLocaleString()}</span></div>`).join("")}
+    </div>`;
+  $("#modelDetail").querySelectorAll("button[data-opt]").forEach(btn => btn.onclick = () => opts[+btn.dataset.opt].files.forEach(startDownload));
+  $("#modelDetail").querySelectorAll(".moreRow").forEach(row => row.onclick = () => loadModelFiles(row.dataset.more));
+  typesetMath($("#modelDetail"));
 }
 
 async function startDownload(file) {

@@ -1022,6 +1022,41 @@ async def api_models_files(request):
     return web.json_response({"ok": True, "repo": repo, "files": files})
 
 
+async def api_models_info(request):
+    repo = safe_repo_id(request.query.get("repo") or "")
+    try:
+        async with ClientSession(timeout=ClientTimeout(total=20)) as s:
+            async with s.get(f"https://huggingface.co/api/models/{repo}", headers={"User-Agent": "ccllrun-Studio/0.1"}) as r:
+                if r.status != 200:
+                    return web.json_response({"ok": False, "error": f"Hugging Face HTTP {r.status}"}, status=502)
+                meta = await r.json(content_type=None)
+            readme = ""
+            async with s.get(f"https://huggingface.co/{repo}/raw/main/README.md", headers={"User-Agent": "ccllrun-Studio/0.1"}) as r:
+                if r.status == 200:
+                    readme = await r.text(errors="replace")
+    except Exception as exc:
+        return web.json_response({"ok": False, "error": f"info modello non riuscite: {exc}"}, status=502)
+    siblings = []
+    author = repo.split("/", 1)[0]
+    try:
+        async with ClientSession(timeout=ClientTimeout(total=15)) as s:
+            async with s.get(f"https://huggingface.co/api/models?author={quote_plus(author)}&limit=8&sort=downloads&direction=-1",
+                             headers={"User-Agent": "ccllrun-Studio/0.1"}) as r:
+                data = await r.json(content_type=None)
+                for m in data if isinstance(data, list) else []:
+                    mid = m.get("id") or m.get("modelId")
+                    if mid and mid != repo:
+                        siblings.append({"id": mid, "downloads": m.get("downloads", 0), "likes": m.get("likes", 0)})
+    except Exception:
+        pass
+    return web.json_response({"ok": True, "repo": repo, "meta": {
+        "downloads": meta.get("downloads", 0), "likes": meta.get("likes", 0),
+        "tags": meta.get("tags", []), "lastModified": meta.get("lastModified") or meta.get("createdAt") or "",
+        "cardData": meta.get("cardData") or {},
+        "pipeline_tag": meta.get("pipeline_tag") or "",
+    }, "readme": readme[:12000], "siblings": siblings})
+
+
 async def download_model_job(job_id, repo, file_path):
     job = DOWNLOADS[job_id]
     dest = model_dest(repo, file_path)
@@ -1260,6 +1295,7 @@ def main():
     app.router.add_get("/api/research/fetch", api_research_fetch)
     app.router.add_get("/api/models/search", api_models_search)
     app.router.add_get("/api/models/files", api_models_files)
+    app.router.add_get("/api/models/info", api_models_info)
     app.router.add_post("/api/models/download", api_models_download)
     app.router.add_get("/api/models/downloads", api_models_downloads)
     app.router.add_post("/api/models/apply", api_models_apply)
