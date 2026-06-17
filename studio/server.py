@@ -70,9 +70,13 @@ STUDIO_PARENT_PID = int(os.environ.get("STUDIO_PARENT_PID", "0") or 0)
 
 DEFAULTS = {
     "big_port": 8001, "small_port": 8002, "proxy_port": 8765,
+    "backend": "llama.cpp",
     "model_big": "qwen-big", "model_small": "small-fast",
     "big_gguf": str(Path.home() / ".lmstudio/models/unsloth/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"),
     "small_gguf": str(Path.home() / ".lmstudio/models/ghost-actual/Qwen3.6-9B-Heretic-History-Q4_K_M-GGUF/history-9b-Q4_K_M.gguf"),
+    "big_mlx": "",
+    "small_mlx": "",
+    "mlx_bin": "mlx_lm.server",
     "studio_markdown": True,
     "studio_autostart": True,
     "studio_lan_enabled": False,
@@ -144,8 +148,11 @@ def pid_alive(pidfile):
 # ---------------------------------------------------------------- /api/status
 async def api_status(request):
     cfg = load_config()
+    backend = cfg.get("backend", "llama.cpp")
     big_gguf = cfg.get("big_gguf", "")
     small_gguf = cfg.get("small_gguf", "")
+    big_mlx = cfg.get("big_mlx", "")
+    small_mlx = cfg.get("small_mlx", "")
     mmproj = cfg.get("mmproj") or ""
     if not mmproj and big_gguf:
         found = sorted(glob.glob(str(Path(big_gguf).parent / "mmproj-*.gguf")))
@@ -163,8 +170,12 @@ async def api_status(request):
         pass
 
     doctor = [
-        check(shutil.which("llama-server"), "llama-server", shutil.which("llama-server") or "non trovato nel PATH",
+        check(backend == "llama.cpp" or backend == "mlx-lm", "backend", backend,
+              "usa llama.cpp oppure mlx-lm", action={"kind": "config", "label": "Apri Impostazioni"}),
+        check(backend != "llama.cpp" or shutil.which("llama-server"), "llama-server", shutil.which("llama-server") or "non trovato nel PATH",
               "brew install llama.cpp", action={"kind": "copy", "label": "Copia install", "value": "brew install llama.cpp"}),
+        check(backend != "mlx-lm" or shutil.which(str(cfg.get("mlx_bin") or "mlx_lm.server")), "mlx-lm server", shutil.which(str(cfg.get("mlx_bin") or "mlx_lm.server")) or "non trovato nel PATH",
+              "pip install mlx-lm", warn=backend != "mlx-lm", action={"kind": "copy", "label": "Copia install", "value": "pip install mlx-lm"}),
         check(shutil.which("claude"), "Claude Code", shutil.which("claude") or "non trovato nel PATH",
               "npm install -g @anthropic-ai/claude-code", action={"kind": "copy", "label": "Copia install", "value": "npm install -g @anthropic-ai/claude-code"}),
         check((CC_DIR / "proxy.py").exists(), "proxy.py", str(CC_DIR / "proxy.py"),
@@ -173,10 +184,14 @@ async def api_status(request):
               "creato automaticamente al primo `ccllrun`", warn=True, action={"kind": "start", "label": "Avvia stack"}),
         check(Path(CCLLRUN_BIN).is_file(), "script ccllrun", CCLLRUN_BIN,
               "imposta CCLLRUN_BIN o reinstalla lo script"),
-        check(big_gguf and Path(big_gguf).is_file(), "GGUF big", big_gguf or "non configurato",
+        check(backend != "llama.cpp" or (big_gguf and Path(big_gguf).is_file() and str(big_gguf).lower().endswith(".gguf")), "GGUF big", big_gguf or "non configurato",
               "imposta big_gguf in config.json", action={"kind": "config", "label": "Apri Impostazioni"}),
-        check(small_gguf and Path(small_gguf).is_file(), "GGUF small", small_gguf or "non configurato",
+        check(backend != "llama.cpp" or (small_gguf and Path(small_gguf).is_file() and str(small_gguf).lower().endswith(".gguf")), "GGUF small", small_gguf or "non configurato",
               "opzionale: small_gguf in config.json (o no_small: true)", warn=True, action={"kind": "config", "label": "Apri Impostazioni"}),
+        check(backend != "mlx-lm" or looks_like_mlx_dir(big_mlx), "MLX big", big_mlx or "non configurato",
+              "imposta big_mlx alla cartella del modello MLX", action={"kind": "config", "label": "Apri Impostazioni"}),
+        check(backend != "mlx-lm" or not small_mlx or looks_like_mlx_dir(small_mlx), "MLX small", small_mlx or "non configurato",
+              "opzionale: small_mlx alla cartella del modello MLX", warn=True, action={"kind": "config", "label": "Apri Impostazioni"}),
         check(mmproj and Path(mmproj).is_file(), "mmproj (visione)", mmproj or "non trovato",
               "opzionale: scarica mmproj-*.gguf accanto al GGUF big", warn=True, action={"kind": "config", "label": "Apri Impostazioni"}),
         check(CONFIG_FILE.exists() and "_config_error" not in cfg, "config.json",
@@ -961,6 +976,29 @@ def file_format(path):
     return ""
 
 
+def looks_like_mlx_dir(path):
+    p = Path(path)
+    if not p.is_dir():
+        return False
+    return (p / "config.json").is_file() and any(p.glob("*.safetensors"))
+
+
+def validate_model_config(cfg):
+    errors = []
+    for key in ("big_gguf", "small_gguf"):
+        value = str(cfg.get(key) or "").strip()
+        if value and not value.lower().endswith(".gguf"):
+            errors.append(f"{key} deve puntare a un file .gguf")
+    for key in ("big_mlx", "small_mlx"):
+        value = str(cfg.get(key) or "").strip()
+        if value and value.lower().endswith((".gguf", ".safetensors")):
+            errors.append(f"{key} deve puntare alla cartella del modello MLX, non a un singolo file")
+    backend = str(cfg.get("backend") or "llama.cpp")
+    if backend not in {"llama.cpp", "mlx-lm"}:
+        errors.append("backend deve essere llama.cpp oppure mlx-lm")
+    return errors
+
+
 async def api_models_search(request):
     q = (request.query.get("q") or "").strip()
     formats = parse_formats(request.query.get("formats"))
@@ -1110,17 +1148,38 @@ async def api_models_apply(request):
     require_csrf(request)
     data = await request.json()
     role = data.get("role")
+    fmt = (data.get("format") or "gguf").lower()
     path = os.path.expanduser(data.get("path") or "")
     if role not in ("big", "small"):
         return web.json_response({"ok": False, "error": "ruolo non valido"}, status=400)
-    if not Path(path).is_file():
-        return web.json_response({"ok": False, "error": "file non trovato"}, status=400)
+    if fmt not in ("gguf", "mlx"):
+        return web.json_response({"ok": False, "error": "formato non valido"}, status=400)
+    if fmt == "gguf":
+        if not Path(path).is_file():
+            return web.json_response({"ok": False, "error": "file non trovato"}, status=400)
+        if not path.lower().endswith(".gguf"):
+            return web.json_response({
+                "ok": False,
+                "error": "ccllrun usa llama.cpp per i campi GGUF: scegli un file .gguf, non un file MLX/safetensors"
+            }, status=400)
+    else:
+        candidate = Path(path)
+        if candidate.is_file():
+            candidate = candidate.parent
+        if not looks_like_mlx_dir(candidate):
+            return web.json_response({
+                "ok": False,
+                "error": "scegli la cartella del modello MLX: deve contenere config.json e file .safetensors"
+            }, status=400)
+        path = str(candidate)
     cfg = {}
     try:
         cfg = json.loads(CONFIG_FILE.read_text())
     except Exception:
         pass
-    cfg["big_gguf" if role == "big" else "small_gguf"] = path
+    cfg[f"{role}_{fmt}"] = path
+    if fmt == "mlx":
+        cfg["backend"] = "mlx-lm"
     CC_DIR.mkdir(exist_ok=True)
     CONFIG_FILE.write_text(json.dumps(cfg, indent=2) + "\n")
     return web.json_response({"ok": True, "config": cfg})
@@ -1140,9 +1199,12 @@ async def api_config_put(request):
     require_csrf(request)
     text = await request.text()
     try:
-        json.loads(text)
+        cfg = json.loads(text)
     except Exception as exc:
         return web.json_response({"ok": False, "error": f"JSON non valido: {exc}"}, status=400)
+    errors = validate_model_config(cfg if isinstance(cfg, dict) else {})
+    if errors:
+        return web.json_response({"ok": False, "error": "; ".join(errors)}, status=400)
     CC_DIR.mkdir(exist_ok=True)
     CONFIG_FILE.write_text(text)
     return web.json_response({"ok": True})

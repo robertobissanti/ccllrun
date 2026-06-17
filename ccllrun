@@ -17,11 +17,15 @@ CONFIG_FILE="$CC_DIR/config.json"
 
 # ---------- 1. default ----------
 PORT=8765
+BACKEND="llama.cpp"
 LLAMA_BIN="llama-server"
+MLX_BIN="mlx_lm.server"
 BIG_PORT=8001
 SMALL_PORT=8002
 BIG_GGUF="$HOME/.lmstudio/models/unsloth/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"
 SMALL_GGUF="$HOME/.lmstudio/models/ghost-actual/Qwen3.6-9B-Heretic-History-Q4_K_M-GGUF/history-9b-Q4_K_M.gguf"
+BIG_MLX=""
+SMALL_MLX=""
 MODEL_BIG="qwen-big"
 MODEL_SMALL="small-fast"
 PDF_MODE="hybrid"
@@ -69,11 +73,15 @@ PY
 # ---------- 3. env (sopra i default, sotto il JSON? no: JSON < env) ----------
 apply_env() {
   PORT="${ccllrun_PROXY_PORT:-$PORT}"
+  BACKEND="${ccllrun_BACKEND:-$BACKEND}"
   LLAMA_BIN="${ccllrun_LLAMA_BIN:-$LLAMA_BIN}"
+  MLX_BIN="${ccllrun_MLX_BIN:-$MLX_BIN}"
   BIG_PORT="${ccllrun_BIG_PORT:-$BIG_PORT}"
   SMALL_PORT="${ccllrun_SMALL_PORT:-$SMALL_PORT}"
   BIG_GGUF="${ccllrun_GGUF_BIG:-$BIG_GGUF}"
   SMALL_GGUF="${ccllrun_GGUF_SMALL:-$SMALL_GGUF}"
+  BIG_MLX="${ccllrun_MLX_BIG:-$BIG_MLX}"
+  SMALL_MLX="${ccllrun_MLX_SMALL:-$SMALL_MLX}"
   MODEL_BIG="${ccllrun_MODEL_BIG:-$MODEL_BIG}"
   MODEL_SMALL="${ccllrun_MODEL_SMALL:-$MODEL_SMALL}"
   PDF_MODE="${ccllrun_PDF_MODE:-$PDF_MODE}"
@@ -86,8 +94,8 @@ apply_config() {  # apply_config <file>
   local f="$1" v
   [[ -f "$f" ]] || return 0
   for pair in \
-    "PORT proxy_port" "LLAMA_BIN llama_bin" "BIG_PORT big_port" \
-    "SMALL_PORT small_port" "BIG_GGUF big_gguf" "SMALL_GGUF small_gguf" \
+    "PORT proxy_port" "BACKEND backend" "LLAMA_BIN llama_bin" "MLX_BIN mlx_bin" "BIG_PORT big_port" \
+    "SMALL_PORT small_port" "BIG_GGUF big_gguf" "SMALL_GGUF small_gguf" "BIG_MLX big_mlx" "SMALL_MLX small_mlx" \
     "MODEL_BIG model_big" "MODEL_SMALL model_small" "PDF_MODE pdf_mode" \
     "CTX_BIG ctx_big" "CTX_SMALL ctx_small" "BATCH batch" "KV_TYPE kv_type" \
     "NGL ngl" "PARALLEL parallel" "REASONING_BUDGET reasoning_budget" \
@@ -107,8 +115,11 @@ ccllrun [opzioni ccllrun] [argomenti claude...]
 
 Opzioni:
   --config <file>        usa un config JSON alternativo
+  --backend <name>       llama.cpp | mlx-lm (default $BACKEND)
   --big-gguf <path>      modello grande
   --small-gguf <path>    modello piccolo ("" per disattivarlo)
+  --big-mlx <dir>        cartella MLX grande (backend mlx-lm)
+  --small-mlx <dir>      cartella MLX piccola (backend mlx-lm)
   --no-small             non avviare il modello piccolo
   --ctx <n>              context del big (default $CTX_BIG)
   --kv <tipo>            f16|q8_0|q4_0 per la KV cache (default $KV_TYPE)
@@ -123,10 +134,10 @@ Opzioni:
   logs [big|small|proxy] segui il log indicato (tail -f, default: big)
   --help-ccllrun         questo aiuto
 
-Config JSON ($CONFIG_FILE), chiavi: big_gguf, small_gguf, ctx_big, ctx_small,
+Config JSON ($CONFIG_FILE), chiavi: backend, big_gguf, small_gguf, big_mlx, small_mlx, ctx_big, ctx_small,
 batch, kv_type, ngl, parallel, reasoning_budget, presence_penalty, mmproj,
 pdf_mode, proxy_port, big_port, small_port, model_big, model_small,
-no_small, extra_big_flags, llama_bin, cc_auto_compact_window,
+no_small, extra_big_flags, llama_bin, mlx_bin, cc_auto_compact_window,
 cc_max_output_tokens, cc_tool_search.
 EOF
 }
@@ -137,8 +148,11 @@ CLI_OVERRIDES=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --config)        CONFIG_FILE="$2"; shift 2 ;;
+    --backend)       CLI_OVERRIDES+=("BACKEND=$2"); shift 2 ;;
     --big-gguf)      CLI_OVERRIDES+=("BIG_GGUF=$2"); shift 2 ;;
     --small-gguf)    CLI_OVERRIDES+=("SMALL_GGUF=$2"); shift 2 ;;
+    --big-mlx)       CLI_OVERRIDES+=("BIG_MLX=$2"); shift 2 ;;
+    --small-mlx)     CLI_OVERRIDES+=("SMALL_MLX=$2"); shift 2 ;;
     --no-small)      CLI_OVERRIDES+=("NO_SMALL=1"); shift ;;
     --ctx)           CLI_OVERRIDES+=("CTX_BIG=$2"); shift 2 ;;
     --kv)            CLI_OVERRIDES+=("KV_TYPE=$2"); shift 2 ;;
@@ -195,6 +209,18 @@ if ! grep -q 'CLAUDE_CODE_ATTRIBUTION_HEADER' "$HOME/.claude/settings.json" 2>/d
 fi
 
 health() { curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$1/health" 2>/dev/null; }
+
+if [[ "$BACKEND" == "mlx-lm" ]]; then
+  echo "[ccllrun] backend mlx-lm configurato." >&2
+  echo "[ccllrun] I modelli MLX vanno indicati come cartelle (big_mlx/small_mlx), per esempio:" >&2
+  echo "[ccllrun]   $BIG_MLX" >&2
+  echo "[ccllrun] Integrazione runtime non ancora attivata: mlx_lm.server espone /v1/chat/completions," >&2
+  echo "[ccllrun] mentre Claude Code passa da /v1/messages. Serve l'adapter Anthropic->OpenAI prima dell'avvio." >&2
+  exit 2
+elif [[ "$BACKEND" != "llama.cpp" ]]; then
+  echo "[ccllrun] backend non valido: $BACKEND (usa llama.cpp oppure mlx-lm)" >&2
+  exit 2
+fi
 
 # ---------- mmproj autodetect ----------
 if [[ -z "$MMPROJ" ]]; then

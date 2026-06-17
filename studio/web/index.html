@@ -477,6 +477,9 @@
   .modelItem .meta, .fileItem .meta, .downloadItem .meta { color: var(--dim); font: 11px var(--mono); margin-top: 5px; }
   .fileItem .row, .downloadItem .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 9px; }
   .fileItem button, .downloadItem button { padding: 6px 10px; font-size: 12px; border-radius: 8px; }
+  .downloadItem .warn { color: var(--warn); font: 11px var(--mono); margin-top: 7px; }
+  .frow.invalid input { border-color: var(--err); }
+  .frow .ferr { color: var(--err); font: 11px var(--mono); grid-column: 2 / -1; margin-top: -4px; }
   .modelDetail { display: grid; gap: 12px; }
   .detailHero { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
   .detailHero h2 { font-size: 24px; margin-bottom: 12px; word-break: break-word; }
@@ -1036,28 +1039,36 @@ async function loadDownloads() {
 function renderDownloads(items) {
   $("#downloadList").innerHTML = items.slice().reverse().map(d => {
     const pct = d.total ? Math.min(100, Math.round(d.downloaded * 100 / d.total)) : 0;
+    const path = String(d.path || "");
+    const isGguf = path.toLowerCase().endsWith(".gguf");
+    const isMlx = /\.(safetensors|json|txt|model|npz)$/i.test(path);
     return `<div class="downloadItem">
       <div class="name">${esc(d.repo + "/" + d.file)}</div>
       <div class="meta">${esc(d.status)} · ${fmtBytes(d.downloaded)} / ${fmtBytes(d.total)}${d.error ? " · " + esc(d.error) : ""}</div>
       <div class="bar"><span style="width:${pct}%"></span></div>
       <div class="meta">${esc(d.path || "")}</div>
-      ${d.status === "done" ? `<div class="row"><button data-apply-path="big|${esc(d.path)}">Usa come big</button><button data-apply-path="small|${esc(d.path)}">Usa come small</button></div>` : ""}
+      ${d.status === "done" && isGguf ? `<div class="row"><button data-apply-path="gguf|big|${esc(d.path)}">Usa come GGUF big</button><button data-apply-path="gguf|small|${esc(d.path)}">Usa come GGUF small</button></div>` : ""}
+      ${d.status === "done" && isMlx ? `<div class="warn">MLX usa la cartella del modello, non il singolo file. Richiede backend mlx-lm.</div><div class="row"><button data-apply-path="mlx|big|${esc(d.path)}">Usa come MLX big</button><button data-apply-path="mlx|small|${esc(d.path)}">Usa come MLX small</button></div>` : ""}
     </div>`;
   }).join("") || `<div class="sub">Nessun download.</div>`;
   $("#downloadList").querySelectorAll("button[data-apply-path]").forEach(btn => {
     btn.onclick = () => {
-      const [role, path] = btn.dataset.applyPath.split("|");
-      applyModel(role, path);
+      const [format, role, path] = btn.dataset.applyPath.split("|");
+      applyModel(format, role, path);
     };
   });
 }
 
-async function applyModel(role, path) {
-  const j = await fetchJson(apiUrl("/api/models/apply"), { method: "POST",
-    headers: { "Content-Type": "application/json", ...HDRS },
-    body: JSON.stringify({ role, path }) });
-  $("#modelMsg").textContent = `config aggiornata: modello ${role}. Riavvia i server per applicare.`;
-  refreshStatus();
+async function applyModel(format, role, path) {
+  try {
+    await fetchJson(apiUrl("/api/models/apply"), { method: "POST",
+      headers: { "Content-Type": "application/json", ...HDRS },
+      body: JSON.stringify({ format, role, path }) });
+    $("#modelMsg").textContent = `config aggiornata: modello ${format.toUpperCase()} ${role}. Riavvia i server per applicare.`;
+    refreshStatus();
+  } catch (e) {
+    $("#modelMsg").textContent = "errore: " + e.message;
+  }
 }
 
 /* ============ ricerca web / source cards ============ */
@@ -2408,8 +2419,11 @@ $("#btnRestart").onclick = () => {
 const fmtK = v => v >= 1024 ? Math.round(v / 1024) + "k" : v;
 const CFG_SCHEMA = [
   { sect: "Modelli" },
+  { k: "backend", t: "select", opts: ["llama.cpp", "mlx-lm"], l: "Backend", d: "llama.cpp usa GGUF; mlx-lm usa cartelle MLX", def: "llama.cpp" },
   { k: "big_gguf", t: "text", l: "GGUF big", d: "path del modello principale", def: "" },
   { k: "small_gguf", t: "text", l: "GGUF small", d: "modello rapido (vuoto = nessuno)", def: "" },
+  { k: "big_mlx", t: "text", l: "MLX big", d: "cartella modello MLX, non file .safetensors", def: "" },
+  { k: "small_mlx", t: "text", l: "MLX small", d: "cartella modello MLX (opzionale)", def: "" },
   { k: "no_small", t: "switch", l: "Disattiva small", d: "non avviare il modello piccolo", def: false },
   { k: "model_big", t: "text", l: "Alias big", d: "nome esposto dall'API", def: "qwen-big" },
   { k: "model_small", t: "text", l: "Alias small", d: "", def: "small-fast" },
@@ -2437,6 +2451,7 @@ const CFG_SCHEMA = [
   { k: "big_port", t: "num", l: "Porta big", d: "", def: 8001 },
   { k: "small_port", t: "num", l: "Porta small", d: "", def: 8002 },
   { k: "llama_bin", t: "text", l: "Binario llama-server", d: "", def: "llama-server" },
+  { k: "mlx_bin", t: "text", l: "Binario mlx-lm", d: "comando server MLX, es. mlx_lm.server", def: "mlx_lm.server" },
   { k: "extra_big_flags", t: "text", l: "Flag extra (big)", d: "passati così come sono, es. --mlock --kv-unified", def: "" },
   { sect: "Claude Code" },
   { k: "cc_auto_compact_window", t: "num", l: "Auto-compact window",
@@ -2472,7 +2487,7 @@ function renderCfgForm(cfg) {
       ctl = `<input type="range" id="${id}" min="${f.min}" max="${f.max}" step="${f.step}" value="${v}">
              <span class="rv">${fmt(v)}</span>`;
     }
-    return `<div class="frow"><span class="fl">${esc(f.l)}</span>${ctl}<span class="fd">${esc(f.d || "")}</span></div>`;
+    return `<div class="frow" data-cfg-row="${esc(f.k || "")}"><span class="fl">${esc(f.l)}</span>${ctl}<span class="fd">${esc(f.d || "")}</span></div>`;
   }).join("");
   // gli slider aggiornano il valore mostrato accanto
   for (const f of CFG_SCHEMA) {
@@ -2480,6 +2495,12 @@ function renderCfgForm(cfg) {
     const el = $("#cf_" + f.k);
     const fmt = f.fmt || (x => x);
     el.addEventListener("input", () => { el.nextElementSibling.textContent = fmt(Number(el.value)); });
+  }
+  validateCfgForm();
+  for (const k of ["backend", "big_gguf", "small_gguf", "big_mlx", "small_mlx"]) {
+    const el = $("#cf_" + k);
+    if (el) el.addEventListener("input", validateCfgForm);
+    if (el) el.addEventListener("change", validateCfgForm);
   }
 }
 
@@ -2495,6 +2516,36 @@ function collectCfgForm() {
     else out[f.k] = el.value.trim();
   }
   return out;
+}
+
+function validateCfgObject(cfg) {
+  const errors = [];
+  const bigGguf = String(cfg.big_gguf || "").trim();
+  const smallGguf = String(cfg.small_gguf || "").trim();
+  const bigMlx = String(cfg.big_mlx || "").trim();
+  const smallMlx = String(cfg.small_mlx || "").trim();
+  const badGguf = p => p && !p.toLowerCase().endsWith(".gguf");
+  const badMlx = p => p && /\.(gguf|safetensors)$/i.test(p);
+  if (badGguf(bigGguf)) errors.push(["big_gguf", "GGUF big deve puntare a un file .gguf. I file MLX/safetensors non sono validi per llama.cpp."]);
+  if (badGguf(smallGguf)) errors.push(["small_gguf", "GGUF small deve puntare a un file .gguf oppure restare vuoto."]);
+  if (badMlx(bigMlx)) errors.push(["big_mlx", "MLX big deve puntare alla cartella del modello, non a un singolo file."]);
+  if (badMlx(smallMlx)) errors.push(["small_mlx", "MLX small deve puntare alla cartella del modello, non a un singolo file."]);
+  return errors;
+}
+
+function validateCfgForm() {
+  $("#cfgForm")?.querySelectorAll(".frow.invalid").forEach(row => {
+    row.classList.remove("invalid");
+    row.querySelector(".ferr")?.remove();
+  });
+  const errors = validateCfgObject(collectCfgForm());
+  for (const [key, msg] of errors) {
+    const row = $(`[data-cfg-row="${key}"]`);
+    if (!row) continue;
+    row.classList.add("invalid");
+    row.insertAdjacentHTML("beforeend", `<div class="ferr">${esc(msg)}</div>`);
+  }
+  return errors;
 }
 
 function setCfgMode(json) {
@@ -2550,6 +2601,12 @@ async function saveConfig() {
     catch (e) { $("#cfgMsg").textContent = "JSON non valido: " + e.message; $("#cfgMsg").style.color = "var(--err)"; return false; }
     body = $("#cfgText").value;
   } else {
+    const errors = validateCfgForm();
+    if (errors.length) {
+      $("#cfgMsg").textContent = errors[0][1];
+      $("#cfgMsg").style.color = "var(--err)";
+      return false;
+    }
     body = JSON.stringify(collectCfgForm(), null, 2) + "\n";
     $("#cfgText").value = body;
   }

@@ -1,6 +1,9 @@
 {
+  "backend": "llama.cpp",
   "big_gguf": "~/.lmstudio/models/unsloth/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf",
   "small_gguf": "~/.lmstudio/models/ghost-actual/Qwen3.6-9B-Heretic-History-Q4_K_M-GGUF/history-9b-Q4_K_M.gguf",
+  "big_mlx": "",
+  "small_mlx": "",
   "ctx_big": 98304,
   "ctx_small": 32768,
   "batch": 2048,
@@ -14,6 +17,8 @@
   "proxy_port": 8765,
   "big_port": 8001,
   "small_port": 8002,
+  "llama_bin": "llama-server",
+  "mlx_bin": "mlx_lm.server",
   "model_big": "qwen-big",
   "model_small": "small-fast",
   "no_small": false,

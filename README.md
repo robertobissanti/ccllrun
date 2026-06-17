@@ -87,6 +87,8 @@ The ones used and tested by the author (Hugging Face links):
 
 Download the `.gguf` files (and the optional `mmproj-*.gguf` into the big model's folder) and set the paths in `~/.ccllrun/config.json`. Any chat-instruct GGUF works; if the filename contains `MTP`, ccllrun enables speculative decoding by itself.
 
+Studio can also search and download MLX repositories, but MLX models are configured as directories (`big_mlx` / `small_mlx`), not as single files. `big_gguf` and `small_gguf` only accept `.gguf` files because the `llama.cpp` backend cannot start `.safetensors` files.
+
 ## CLI reference
 
 ```bash
@@ -180,6 +182,9 @@ Precedence (weakest to strongest): **built-in defaults → `~/.ccllrun/config.js
 |---|---|---|---|---|
 | `big_gguf` | `ccllrun_GGUF_BIG` | `--big-gguf` | Qwen3.6-35B-A3B Q4_K_XL | main model |
 | `small_gguf` | `ccllrun_GGUF_SMALL` | `--small-gguf` | history-9b Q4_K_M | fast model (`""` to disable) |
+| `backend` | `ccllrun_BACKEND` | `--backend` | `llama.cpp` | runtime backend (`llama.cpp`; `mlx-lm` requires a dedicated adapter) |
+| `big_mlx` | `ccllrun_MLX_BIG` | `--big-mlx` | `""` | main MLX model directory |
+| `small_mlx` | `ccllrun_MLX_SMALL` | `--small-mlx` | `""` | fast MLX model directory |
 | `no_small` | — | `--no-small` | `false` | don't start the small model |
 | `model_big` | `ccllrun_MODEL_BIG` | — | `qwen-big` | API alias of the big model |
 | `model_small` | `ccllrun_MODEL_SMALL` | — | `small-fast` | API alias of the small model |
