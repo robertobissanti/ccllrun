@@ -233,7 +233,10 @@ def anthropic_to_openai(body):
     out = {
         "model": "default_model" if UPSTREAM_API == "openai" else (body.get("model") or "local"),
         "messages": messages or [{"role": "user", "content": ""}],
-        "stream": bool(body.get("stream")),
+        # mlx_lm.server can try to parse tool calls while streaming and discard
+        # incomplete tool text. For OpenAI-mode backends we get a full response
+        # from upstream, then synthesize Anthropic SSE for streaming clients.
+        "stream": False if UPSTREAM_API == "openai" else bool(body.get("stream")),
     }
     tools = []
     for tool in body.get("tools") or []:
@@ -346,6 +349,64 @@ def openai_tool_delta_state(tool_calls, delta_calls):
             state["arguments"] += str(fn.get("arguments"))
 
 
+async def write_anthropic_sse_message(resp, message):
+    await resp.write(sse("message_start", {
+        "type": "message_start",
+        "message": {
+            "id": message.get("id") or "msg_local",
+            "type": "message",
+            "role": "assistant",
+            "model": message.get("model") or "local",
+            "content": [],
+            "stop_reason": None,
+            "stop_sequence": None,
+            "usage": message.get("usage") or {"input_tokens": 0, "output_tokens": 0},
+        },
+    }))
+    for idx, block in enumerate(message.get("content") or []):
+        start_block = dict(block)
+        if start_block.get("type") == "text":
+            text = start_block.get("text") or ""
+            start_block["text"] = ""
+            await resp.write(sse("content_block_start", {
+                "type": "content_block_start", "index": idx, "content_block": start_block,
+            }))
+            if text:
+                await resp.write(sse("content_block_delta", {
+                    "type": "content_block_delta", "index": idx,
+                    "delta": {"type": "text_delta", "text": text},
+                }))
+        elif start_block.get("type") == "tool_use":
+            tool_input = start_block.get("input") or {}
+            start_block["input"] = {}
+            await resp.write(sse("content_block_start", {
+                "type": "content_block_start", "index": idx, "content_block": start_block,
+            }))
+            await resp.write(sse("content_block_delta", {
+                "type": "content_block_delta", "index": idx,
+                "delta": {
+                    "type": "input_json_delta",
+                    "partial_json": json.dumps(tool_input, ensure_ascii=False),
+                },
+            }))
+        else:
+            await resp.write(sse("content_block_start", {
+                "type": "content_block_start", "index": idx, "content_block": start_block,
+            }))
+        await resp.write(sse("content_block_stop", {
+            "type": "content_block_stop", "index": idx,
+        }))
+    await resp.write(sse("message_delta", {
+        "type": "message_delta",
+        "delta": {
+            "stop_reason": message.get("stop_reason") or "end_turn",
+            "stop_sequence": message.get("stop_sequence"),
+        },
+        "usage": {"output_tokens": (message.get("usage") or {}).get("output_tokens", 0)},
+    }))
+    await resp.write(sse("message_stop", {"type": "message_stop"}))
+
+
 # --------------------------------------------------------------------------- #
 # Proxy plumbing
 # --------------------------------------------------------------------------- #
@@ -366,11 +427,13 @@ async def handle(request):
     path_qs = request.path_qs
     openai_mode = UPSTREAM_API == "openai"
     model = "local"
+    client_wants_stream = False
 
     if request.method == "POST" and request.path.endswith("/v1/messages"):
         try:
             data = json.loads(body)
             model = str(data.get("model") or model)
+            client_wants_stream = bool(data.get("stream"))
             if UPSTREAM_SMALL and str(data.get("model", "")).startswith(SMALL_NAME):
                 target = UPSTREAM_SMALL
             if openai_mode:
@@ -481,7 +544,17 @@ async def handle(request):
                         return resp
 
                     data = await upstream.json(content_type=None)
-                    return web.json_response(anthropic_message_response(data, model), status=upstream.status)
+                    message = anthropic_message_response(data, model)
+                    if client_wants_stream:
+                        resp = web.StreamResponse(status=upstream.status, headers={
+                            "content-type": "text/event-stream; charset=utf-8",
+                            "cache-control": "no-cache",
+                        })
+                        await resp.prepare(request)
+                        await write_anthropic_sse_message(resp, message)
+                        await resp.write_eof()
+                        return resp
+                    return web.json_response(message, status=upstream.status)
 
                 resp_headers = {k: v for k, v in upstream.headers.items()
                                 if k.lower() not in RESP_SKIP}
