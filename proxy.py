@@ -286,6 +286,13 @@ RESP_SKIP = {"content-length", "transfer-encoding", "content-encoding", "connect
 
 
 async def handle(request):
+    if request.method in {"GET", "HEAD"} and request.path == "/health":
+        return web.json_response({"status": "ok"})
+    if request.method in {"GET", "HEAD"} and request.path == "/props":
+        return web.json_response({"backend": UPSTREAM_API, "upstream": UPSTREAM})
+    if request.method == "HEAD" and request.path == "/":
+        return web.Response(status=200)
+
     body = await request.read()
     target = UPSTREAM
     path_qs = request.path_qs
