@@ -21,6 +21,8 @@ Env:
 import asyncio
 import fcntl
 import glob
+import html
+from html.parser import HTMLParser
 import json
 import os
 import pty
@@ -30,6 +32,7 @@ import socket
 import struct
 import sys
 import termios
+from urllib.parse import parse_qs, quote_plus, urlparse
 from pathlib import Path
 
 from aiohttp import web, ClientSession, ClientTimeout
@@ -786,6 +789,149 @@ async def api_skills(request):
     return web.json_response({"ok": True, "skills": items})
 
 
+# ----------------------------------------------------------- web research
+class SearchHTMLParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.results = []
+        self._in_a = False
+        self._href = ""
+        self._title = []
+        self._in_snip = False
+        self._snip = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        cls = attrs.get("class", "")
+        if tag == "a" and ("result__a" in cls or "result-link" in cls):
+            self._in_a = True
+            self._href = attrs.get("href", "")
+            self._title = []
+        if tag in ("a", "div") and ("result__snippet" in cls or "result-snippet" in cls):
+            self._in_snip = True
+            self._snip = []
+
+    def handle_endtag(self, tag):
+        if tag == "a" and self._in_a:
+            title = html.unescape("".join(self._title).strip())
+            url = clean_result_url(self._href)
+            if title and url:
+                self.results.append({"title": title, "url": url, "snippet": ""})
+            self._in_a = False
+        if tag in ("a", "div") and self._in_snip:
+            snip = html.unescape("".join(self._snip).strip())
+            if snip and self.results and not self.results[-1].get("snippet"):
+                self.results[-1]["snippet"] = snip
+            self._in_snip = False
+
+    def handle_data(self, data):
+        if self._in_a:
+            self._title.append(data)
+        if self._in_snip:
+            self._snip.append(data)
+
+
+class TextHTMLParser(HTMLParser):
+    SKIP = {"script", "style", "noscript", "svg", "canvas"}
+
+    def __init__(self):
+        super().__init__()
+        self.parts = []
+        self._skip = 0
+        self.title = ""
+        self._in_title = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self.SKIP:
+            self._skip += 1
+        if tag == "title":
+            self._in_title = True
+        if tag in ("p", "br", "li", "h1", "h2", "h3", "article", "section"):
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag in self.SKIP and self._skip:
+            self._skip -= 1
+        if tag == "title":
+            self._in_title = False
+        if tag in ("p", "li", "h1", "h2", "h3"):
+            self.parts.append("\n")
+
+    def handle_data(self, data):
+        if self._skip:
+            return
+        text = " ".join(data.split())
+        if not text:
+            return
+        if self._in_title:
+            self.title += text + " "
+        else:
+            self.parts.append(text + " ")
+
+    def text(self):
+        return "\n".join(line.strip() for line in "".join(self.parts).splitlines() if line.strip())
+
+
+def clean_result_url(url):
+    if not url:
+        return ""
+    if url.startswith("//"):
+        url = "https:" + url
+    parsed = urlparse(url)
+    if parsed.netloc.endswith("duckduckgo.com") and parsed.path.startswith("/l/"):
+        qs = parse_qs(parsed.query)
+        return (qs.get("uddg") or [""])[0]
+    if parsed.scheme in ("http", "https"):
+        return url
+    return ""
+
+
+async def api_research_search(request):
+    q = (request.query.get("q") or "").strip()
+    if not q:
+        return web.json_response({"ok": False, "error": "query vuota"}, status=400)
+    limit = max(1, min(12, int(request.query.get("limit", "8"))))
+    url = "https://duckduckgo.com/html/?q=" + quote_plus(q)
+    headers = {"User-Agent": "ccllrun-Studio/0.1 (+local research)"}
+    try:
+        async with ClientSession(timeout=ClientTimeout(total=15)) as s:
+            async with s.get(url, headers=headers) as r:
+                text = await r.text(errors="replace")
+    except Exception as exc:
+        return web.json_response({"ok": False, "error": f"ricerca non riuscita: {exc}"}, status=502)
+    p = SearchHTMLParser()
+    p.feed(text)
+    seen, out = set(), []
+    for item in p.results:
+        if item["url"] in seen:
+            continue
+        seen.add(item["url"])
+        out.append(item)
+        if len(out) >= limit:
+            break
+    return web.json_response({"ok": True, "query": q, "results": out})
+
+
+async def api_research_fetch(request):
+    url = (request.query.get("url") or "").strip()
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        return web.json_response({"ok": False, "error": "URL non valido"}, status=400)
+    headers = {"User-Agent": "ccllrun-Studio/0.1 (+local research)"}
+    try:
+        async with ClientSession(timeout=ClientTimeout(total=20)) as s:
+            async with s.get(url, headers=headers, max_redirects=5) as r:
+                raw = await r.text(errors="replace")
+                final_url = str(r.url)
+    except Exception as exc:
+        return web.json_response({"ok": False, "error": f"lettura non riuscita: {exc}"}, status=502)
+    p = TextHTMLParser()
+    p.feed(raw[:2_000_000])
+    text = p.text()
+    return web.json_response({"ok": True, "url": final_url, "title": p.title.strip()[:240],
+                              "text": text[:12000], "chars": len(text)})
+
+
 # -------------------------------------------------------------- config & log
 async def api_config_get(request):
     try:
@@ -951,6 +1097,8 @@ def main():
     app.router.add_post("/api/perm/reply", api_perm_reply)
     app.router.add_get("/api/commands", api_commands)
     app.router.add_get("/api/skills", api_skills)
+    app.router.add_get("/api/research/search", api_research_search)
+    app.router.add_get("/api/research/fetch", api_research_fetch)
     app.router.add_get("/api/config", api_config_get)
     app.router.add_put("/api/config", api_config_put)
     app.router.add_get("/api/logs", api_logs)

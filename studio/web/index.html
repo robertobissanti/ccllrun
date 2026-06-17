@@ -443,6 +443,22 @@
                    border: 1px solid var(--border); border-radius: 8px; padding: 8px; margin-top: 6px; max-height: 220px; overflow: auto; }
   .skillCard .row { margin-top: 10px; }
   .skillCard button { padding: 6px 10px; font-size: 12px; border-radius: 8px; }
+  .researchTop { display: flex; gap: 8px; margin: 12px 0 16px; align-items: stretch; }
+  .researchTop input { flex: 1; background: var(--panel); color: var(--text);
+                       border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; outline: none; }
+  .researchTop input:focus { border-color: var(--accent); }
+  .sourceGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+  .sourceCard { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+  .sourceCard h3 { font-size: 13px; line-height: 1.35; margin-bottom: 8px; }
+  .sourceCard h3 a { color: var(--text); text-decoration: none; }
+  .sourceCard h3 a:hover { color: var(--accent); }
+  .sourceCard .url { color: var(--dim); font: 10.5px var(--mono); word-break: break-all; margin-bottom: 8px; }
+  .sourceCard .snip { color: var(--dim); font-size: 12px; min-height: 42px; }
+  .sourceCard .sourceText { margin-top: 9px; background: var(--logbg); border: 1px solid var(--border);
+                            border-radius: 8px; padding: 8px; max-height: 220px; overflow: auto;
+                            white-space: pre-wrap; font: 11px/1.45 var(--mono); color: var(--logtx); }
+  .sourceCard .row { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .sourceCard button { padding: 6px 10px; font-size: 12px; border-radius: 8px; }
   .lanBox { margin: 14px 0 18px; padding: 12px 14px; border: 1px solid var(--border);
             border-radius: 12px; background: var(--panel); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .lanBox .lanMain { font-weight: 600; }
@@ -526,6 +542,7 @@
   <div id="chatList"></div>
   <div class="sect" style="margin-top:8px">Sistema</div>
   <div class="nav" data-p="status" onclick="go('status')"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M4 12h4l3-7 4 14 3-7h2"/></svg> Stato</div>
+  <div class="nav" data-p="research" onclick="go('research')"><svg class="uiIcon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/><path d="M8 11h6M11 8v6"/></svg> Ricerca</div>
   <div class="nav" data-p="skills" onclick="go('skills')"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12 4 7.5"/></svg> Skills</div>
   <div class="nav" data-p="config" onclick="go('config')"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg> Impostazioni</div>
   <div class="nav" data-p="logs" onclick="go('logs')"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 12h6M10 16h6"/></svg> Log</div>
@@ -641,6 +658,18 @@
     <h1 style="margin-top:28px">Setup doctor</h1>
     <div class="sub">Verifica dei requisiti, con il rimedio quando manca qualcosa.</div>
     <div class="cards" id="docCards"></div>
+  </div></div>
+
+  <!-- ============ RICERCA ============ -->
+  <div class="page" id="researchPage"><div class="pad">
+    <h1>Ricerca</h1>
+    <div class="sub">Cerca sul web, apri le fonti e allega estratti alla chat come contesto citabile.</div>
+    <div class="researchTop">
+      <input id="researchQuery" type="search" placeholder="Cerca nel web">
+      <button class="primary" id="btnResearch">Cerca</button>
+    </div>
+    <div class="sub" id="researchMsg"></div>
+    <div class="sourceGrid" id="sourceGrid"></div>
   </div></div>
 
   <!-- ============ SKILLS ============ -->
@@ -780,6 +809,79 @@ function navTo(page) {
   if (page === "config") loadConfig();
   if (page === "skills") loadSkills();
   applyWorkVisibility();
+}
+
+/* ============ ricerca web / source cards ============ */
+let researchResults = [];
+
+function targetComposer() {
+  return cur() ? $("#inp") : $("#homeInp");
+}
+
+async function runResearch() {
+  const q = $("#researchQuery").value.trim();
+  if (!q) return;
+  $("#researchMsg").textContent = "ricerca in corso…";
+  $("#sourceGrid").innerHTML = "";
+  try {
+    const j = await (await fetch("/api/research/search?q=" + encodeURIComponent(q))).json();
+    if (!j.ok) throw new Error(j.error || "ricerca non riuscita");
+    researchResults = j.results || [];
+    $("#researchMsg").textContent = `${researchResults.length} risultati`;
+  } catch (e) {
+    researchResults = [];
+    $("#researchMsg").textContent = "errore: " + e.message;
+  }
+  renderResearch();
+}
+
+function sourcePrompt(src) {
+  const text = src.text ? src.text.slice(0, 3500) : (src.snippet || "");
+  return `Fonte: ${src.title || src.url}\nURL: ${src.url}\nEstratto:\n${text}\n\n`;
+}
+
+function attachSource(src) {
+  const ta = targetComposer();
+  const prefix = `Usa questa fonte nella risposta, citando il link quando rilevante.\n\n${sourcePrompt(src)}`;
+  ta.value = prefix + ta.value;
+  go(cur() ? "chat" : "home");
+  ta.focus();
+}
+
+async function fetchSource(i) {
+  const src = researchResults[i];
+  if (!src || src.loading || src.text) return;
+  src.loading = true; renderResearch();
+  try {
+    const j = await (await fetch("/api/research/fetch?url=" + encodeURIComponent(src.url))).json();
+    if (!j.ok) throw new Error(j.error || "lettura non riuscita");
+    Object.assign(src, { title: j.title || src.title, url: j.url || src.url, text: j.text || "", chars: j.chars || 0 });
+  } catch (e) {
+    src.error = e.message;
+  }
+  src.loading = false; renderResearch();
+}
+
+function renderResearch() {
+  $("#sourceGrid").innerHTML = researchResults.map((r, i) => `
+    <div class="sourceCard">
+      <h3><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.title || r.url)}</a></h3>
+      <div class="url">${esc(r.url)}</div>
+      <div class="snip">${esc(r.error ? "Errore: " + r.error : (r.snippet || ""))}</div>
+      ${r.text ? `<div class="sourceText">${esc(r.text.slice(0, 2200))}${r.text.length > 2200 ? "\n…" : ""}</div>` : ""}
+      <div class="row">
+        <button data-fetch="${i}">${r.loading ? "lettura…" : r.text ? "Rileggi" : "Leggi fonte"}</button>
+        <button class="primary" data-attach="${i}">Allega alla chat</button>
+      </div>
+    </div>`).join("") || `<div class="sub">Nessuna fonte.</div>`;
+  $("#sourceGrid").querySelectorAll("button[data-fetch]").forEach(btn =>
+    btn.onclick = () => fetchSource(+btn.dataset.fetch));
+  $("#sourceGrid").querySelectorAll("button[data-attach]").forEach(btn =>
+    btn.onclick = async () => {
+      const i = +btn.dataset.attach;
+      if (!researchResults[i].text) await fetchSource(i);
+      attachSource(researchResults[i]);
+    });
 }
 
 /* ============ SKILLS picker locale ============ */
@@ -2231,6 +2333,10 @@ async function loadLogs() {
 }
 $("#logSel").onchange = loadLogs;
 setInterval(() => { if ($("#logAuto").checked) loadLogs(); }, 3000);
+$("#btnResearch").onclick = runResearch;
+$("#researchQuery").addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); runResearch(); }
+});
 $("#skillSearch").oninput = renderSkills;
 $("#btnSkillReload").onclick = () => loadSkills(true);
 
