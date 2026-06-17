@@ -19,11 +19,16 @@ Env:
 """
 
 import asyncio
+import fcntl
 import glob
 import json
 import os
+import pty
 import shutil
+import signal
+import struct
 import sys
+import termios
 from pathlib import Path
 
 from aiohttp import web, ClientSession, ClientTimeout
@@ -57,6 +62,7 @@ CLAUDE_BIN = _find_bin("CLAUDE_BIN", "claude",
                         str(Path.home() / ".claude/local/claude")])
 STUDIO_PORT = int(os.environ.get("STUDIO_PORT", "8770"))
 STUDIO_HOST = os.environ.get("STUDIO_HOST", "127.0.0.1")
+STUDIO_PARENT_PID = int(os.environ.get("STUDIO_PARENT_PID", "0") or 0)
 
 DEFAULTS = {
     "big_port": 8001, "small_port": 8002, "proxy_port": 8765,
@@ -172,7 +178,8 @@ async def api_status(request):
         "proxy": {"up": proxy_up, "port": proxy_port, "pid": pid_alive("proxy.pid")},
     }
     return web.json_response({"doctor": doctor, "servers": servers, "config": cfg,
-                              "studio": {"host": STUDIO_HOST, "port": STUDIO_PORT}})
+                              "studio": {"host": STUDIO_HOST, "port": STUDIO_PORT,
+                                         "action": action_snapshot()}})
 
 
 # ----------------------------------------------------- start/stop dello stack
@@ -182,27 +189,116 @@ def require_csrf(request):
 
 
 START_LOCK = asyncio.Lock()
+SERVER_ACTION = {"kind": None, "running": False, "output": "", "ok": None}
+ACTION_LOCK_FILE = CC_DIR / "studio-action.lock"
+
+
+async def run_ccllrun(*args, timeout=None):
+    proc = await asyncio.create_subprocess_exec(
+        "bash", CCLLRUN_BIN, *args, env=aug_env(),
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+        start_new_session=True)
+    if timeout is None:
+        out, _ = await proc.communicate()
+    else:
+        try:
+            out, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        except asyncio.TimeoutError:
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except OSError:
+                proc.kill()
+            out, _ = await proc.communicate()
+            return 124, out + b"\n[ccllrun Studio] timeout comando"
+    return proc.returncode, out
+
+
+def action_snapshot():
+    return dict(SERVER_ACTION)
+
+
+async def run_server_action(kind, steps):
+    global STACK_STARTED_BY_STUDIO
+    initial = {"start": "avvio in corso...", "stop": "arresto in corso...",
+               "restart": "riavvio in corso..."}.get(kind, "azione in corso...")
+    SERVER_ACTION.update({"kind": kind, "running": True, "output": initial, "ok": None})
+    ok = True
+    output = [initial]
+    lock_fh = None
+    try:
+        CC_DIR.mkdir(exist_ok=True)
+        lock_fh = open(ACTION_LOCK_FILE, "w")
+        try:
+            fcntl.flock(lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            ok = False
+            output.append("[ccllrun Studio] un'altra azione sui server e' gia' in corso")
+            return
+        async with START_LOCK:
+            for args, timeout in steps:
+                code, out = await run_ccllrun(*args, timeout=timeout)
+                text = out.decode(errors="replace").strip()
+                if text:
+                    output.append(text)
+                SERVER_ACTION.update({"output": "\n".join(output)})
+                if code != 0:
+                    ok = False
+                    break
+        if ok:
+            if kind in ("start", "restart"):
+                STACK_STARTED_BY_STUDIO = True
+            elif kind == "stop":
+                STACK_STARTED_BY_STUDIO = False
+    except asyncio.CancelledError:
+        ok = False
+        output.append("[ccllrun Studio] azione annullata")
+        raise
+    except Exception as exc:
+        ok = False
+        output.append(f"[ccllrun Studio] errore: {exc}")
+    finally:
+        if lock_fh:
+            try:
+                fcntl.flock(lock_fh, fcntl.LOCK_UN)
+                lock_fh.close()
+            except OSError:
+                pass
+        SERVER_ACTION.update({"kind": kind, "running": False,
+                              "output": "\n".join(output), "ok": ok})
+
+
+def start_server_action(kind, steps):
+    if SERVER_ACTION.get("running"):
+        return False
+    asyncio.create_task(run_server_action(kind, steps))
+    return True
 
 
 async def api_start(request):
     require_csrf(request)
     if not Path(CCLLRUN_BIN).is_file():
         return web.json_response({"ok": False, "error": f"script non trovato: {CCLLRUN_BIN}"}, status=500)
-    async with START_LOCK:
-        proc = await asyncio.create_subprocess_exec(
-            "bash", CCLLRUN_BIN, "servers", env=aug_env(),
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
-        out, _ = await proc.communicate()
-    return web.json_response({"ok": proc.returncode == 0, "output": out.decode(errors="replace")})
+    started = start_server_action("start", [(("servers",), 180)])
+    return web.json_response({"ok": True, "accepted": started,
+                              "output": "avvio gia' in corso" if not started else "avvio avviato"})
 
 
 async def api_stop(request):
     require_csrf(request)
-    proc = await asyncio.create_subprocess_exec(
-        "bash", CCLLRUN_BIN, "stop", env=aug_env(),
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
-    out, _ = await proc.communicate()
-    return web.json_response({"ok": proc.returncode == 0, "output": out.decode(errors="replace")})
+    if not Path(CCLLRUN_BIN).is_file():
+        return web.json_response({"ok": False, "error": f"script non trovato: {CCLLRUN_BIN}"}, status=500)
+    started = start_server_action("stop", [(("stop",), 20)])
+    return web.json_response({"ok": True, "accepted": started,
+                              "output": "azione gia' in corso" if not started else "arresto avviato"})
+
+
+async def api_restart(request):
+    require_csrf(request)
+    if not Path(CCLLRUN_BIN).is_file():
+        return web.json_response({"ok": False, "error": f"script non trovato: {CCLLRUN_BIN}"}, status=500)
+    started = start_server_action("restart", [(("stop",), 20), (("servers",), 180)])
+    return web.json_response({"ok": True, "accepted": started,
+                              "output": "azione gia' in corso" if not started else "riavvio avviato"})
 
 
 async def api_launch(request):
@@ -379,6 +475,11 @@ async def api_claude(request):
     perm_mode = data.get("permission_mode") or "acceptEdits"
     cmd = [CLAUDE_BIN, "-p", "--output-format", "stream-json", "--verbose",
            "--permission-mode", perm_mode]
+    # token in tempo reale: --include-partial-messages aggiunge eventi
+    # stream_event con i delta (thinking_delta/text_delta). Opt-in dalla GUI
+    # (switch "Token live"): aumenta il traffico, quindi solo se richiesto.
+    if data.get("partial"):
+        cmd += ["--include-partial-messages"]
     # approvazione interattiva: ogni permesso non coperto dalla modalita' passa
     # dalla card in chat (permtool MCP -> /api/perm/*); inutile in bypass
     if perm_mode != "bypassPermissions" and (HERE / "permtool.py").is_file():
@@ -430,6 +531,116 @@ async def api_claude(request):
             raise
         await resp.write_eof()
         return resp
+
+
+# ------------------------------------------- terminale embeddato (PTY via WS)
+# La tab "Terminale" del pannello apre una shell interattiva nella cartella
+# della chat. Un PTY (os.forkpty) collega una shell zsh al WebSocket: i tasti
+# dal browser vanno sul master fd, l'output del fd torna al browser (xterm.js).
+# Solo localhost (la dashboard e' 127.0.0.1 di default); resta protetto da CSRF
+# sull'header di upgrade come gli altri endpoint mutanti.
+def _set_winsize(fd, rows, cols):
+    try:
+        fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
+    except OSError:
+        pass
+
+
+async def api_term(request):
+    # l'handshake WS non porta header custom da fetch(): autorizziamo via query
+    # token uguale all'header CSRF (origine comunque localhost-only)
+    if request.query.get("csrf") != "ccllrun-studio":
+        raise web.HTTPForbidden(text="missing csrf token")
+    ws = web.WebSocketResponse(heartbeat=30)
+    await ws.prepare(request)
+
+    cwd = os.path.expanduser((request.query.get("cwd") or "").strip() or str(Path.home()))
+    if not Path(cwd).is_dir():
+        cwd = str(Path.home())
+    try:
+        cols = max(8, min(500, int(request.query.get("cols", "80"))))
+        rows = max(4, min(200, int(request.query.get("rows", "24"))))
+    except ValueError:
+        cols, rows = 80, 24
+
+    pid, master_fd = pty.fork()
+    if pid == 0:                       # processo figlio: diventa la shell
+        os.environ["TERM"] = "xterm-256color"
+        try:
+            os.chdir(cwd)
+        except OSError:
+            pass
+        shell = os.environ.get("SHELL", "/bin/zsh")
+        os.execvp(shell, [shell, "-i"])
+        os._exit(127)                  # execvp non torna; per sicurezza
+
+    # processo padre: ponte master_fd <-> websocket
+    _set_winsize(master_fd, rows, cols)
+    os.set_blocking(master_fd, False)
+    loop = asyncio.get_event_loop()
+    closed = asyncio.Event()
+    out_q = asyncio.Queue()
+
+    def on_readable():
+        try:
+            data = os.read(master_fd, 65536)
+        except (BlockingIOError, InterruptedError):
+            return
+        except OSError:
+            closed.set(); return
+        if not data:
+            closed.set(); return
+        out_q.put_nowait(data)
+
+    loop.add_reader(master_fd, on_readable)
+
+    async def pump_output():
+        while True:
+            data = await out_q.get()
+            # Mantieni l'ordine dei blocchi PTY: le app full-screen (vim, less,
+            # top) usano sequenze cursoriali e soffrono invii concorrenti.
+            await ws.send_bytes(data)
+
+    async def pump_input():
+        async for msg in ws:
+            if msg.type == web.WSMsgType.BINARY:
+                os.write(master_fd, msg.data)
+            elif msg.type == web.WSMsgType.TEXT:
+                # i messaggi di controllo sono JSON {"resize":[cols,rows]};
+                # qualsiasi altro testo e' input grezzo da scrivere sul PTY
+                try:
+                    ctl = json.loads(msg.data)
+                except (ValueError, TypeError):
+                    ctl = None
+                if isinstance(ctl, dict) and "resize" in ctl:
+                    c, r = ctl["resize"]
+                    _set_winsize(master_fd, int(r), int(c))
+                else:
+                    os.write(master_fd, msg.data.encode())
+            elif msg.type in (web.WSMsgType.CLOSE, web.WSMsgType.ERROR):
+                break
+        closed.set()
+
+    input_task = asyncio.ensure_future(pump_input())
+    output_task = asyncio.ensure_future(pump_output())
+    try:
+        await closed.wait()
+    finally:
+        loop.remove_reader(master_fd)
+        input_task.cancel()
+        output_task.cancel()
+        try:
+            os.kill(pid, signal.SIGHUP)
+        except OSError:
+            pass
+        try:
+            os.close(master_fd)
+        except OSError:
+            pass
+        await loop.run_in_executor(None, lambda: os.waitpid(pid, os.WNOHANG))
+        if not ws.closed:
+            await ws.close()
+    return ws
 
 
 # ------------------------------------------- comandi slash / skill disponibili
@@ -517,6 +728,22 @@ async def api_config_put(request):
     return web.json_response({"ok": True})
 
 
+async def api_file(request):
+    """Restituisce il contenuto testuale di un file (per l'Anteprima del pannello).
+    Solo lettura; tetto di dimensione per non saturare la WKWebView."""
+    path = os.path.expanduser(request.query.get("path", ""))
+    p = Path(path)
+    if not path or not p.is_file():
+        return web.json_response({"ok": False, "error": "file non trovato"}, status=404)
+    try:
+        if p.stat().st_size > 2 * 1024 * 1024:
+            return web.json_response({"ok": False, "error": "file troppo grande per l'anteprima"}, status=413)
+        text = p.read_text(errors="replace")
+    except OSError as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=500)
+    return web.json_response({"ok": True, "text": text, "ext": p.suffix.lower().lstrip(".")})
+
+
 async def api_logs(request):
     name = request.query.get("name", "big")
     lines = min(int(request.query.get("lines", "200")), 2000)
@@ -586,15 +813,7 @@ async def autostart_stack(app):
     if await http_json(f"http://127.0.0.1:{cfg['proxy_port']}/v1/models") is not None:
         return                                    # gia' attivo
 
-    STACK_STARTED_BY_STUDIO = True
-
-    async def run():
-        proc = await asyncio.create_subprocess_exec(
-            "bash", CCLLRUN_BIN, "servers", env=aug_env(),
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
-        out, _ = await proc.communicate()
-        print(f"[studio] autostart: {out.decode(errors='replace').strip()}", flush=True)
-    asyncio.ensure_future(run())
+    start_server_action("start", [(("servers",), None)])
 
 
 async def stop_stack_on_exit(app):
@@ -604,18 +823,39 @@ async def stop_stack_on_exit(app):
     if not STACK_STARTED_BY_STUDIO or not Path(CCLLRUN_BIN).is_file():
         return
     try:
-        proc = await asyncio.create_subprocess_exec(
-            "bash", CCLLRUN_BIN, "stop", env=aug_env(),
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
-        out, _ = await asyncio.wait_for(proc.communicate(), timeout=15)
+        code, out = await run_ccllrun("stop", timeout=15)
         print(f"[studio] stop allo shutdown: {out.decode(errors='replace').strip()}", flush=True)
     except Exception as exc:
         print(f"[studio] stop allo shutdown fallito: {exc}", flush=True)
 
 
+async def parent_watchdog(app):
+    """Se il wrapper nativo muore, non lasciare server.py orfano con lock/porta."""
+    if not STUDIO_PARENT_PID:
+        return
+    async def watch():
+        while True:
+            await asyncio.sleep(2)
+            try:
+                os.kill(STUDIO_PARENT_PID, 0)
+            except OSError:
+                print("[studio] parent app non piu' attiva: shutdown server", flush=True)
+                os.kill(os.getpid(), signal.SIGTERM)
+                return
+    app["parent_watchdog"] = asyncio.create_task(watch())
+
+
+async def stop_parent_watchdog(app):
+    task = app.get("parent_watchdog")
+    if task:
+        task.cancel()
+
+
 def main():
     app = web.Application(client_max_size=64 * 1024 * 1024)
     app.on_startup.append(autostart_stack)
+    app.on_startup.append(parent_watchdog)
+    app.on_cleanup.append(stop_parent_watchdog)
     app.on_cleanup.append(stop_stack_on_exit)
     app.router.add_get("/", index)
     app.router.add_get("/mark.svg", mark_svg)
@@ -623,6 +863,7 @@ def main():
     app.router.add_get("/api/status", api_status)
     app.router.add_post("/api/start", api_start)
     app.router.add_post("/api/stop", api_stop)
+    app.router.add_post("/api/restart", api_restart)
     app.router.add_post("/api/launch", api_launch)
     app.router.add_post("/api/claude", api_claude)
     app.router.add_post("/api/perm/ask", api_perm_ask)
@@ -632,6 +873,8 @@ def main():
     app.router.add_get("/api/config", api_config_get)
     app.router.add_put("/api/config", api_config_put)
     app.router.add_get("/api/logs", api_logs)
+    app.router.add_get("/api/file", api_file)
+    app.router.add_get("/api/term", api_term)
     app.router.add_route("*", "/v1/{tail:.*}", v1_proxy)
     print(f"[studio] http://{STUDIO_HOST}:{STUDIO_PORT}", flush=True)
     web.run_app(app, host=STUDIO_HOST, port=STUDIO_PORT, print=None)

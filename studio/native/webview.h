@@ -53,11 +53,32 @@ static void      webview_run(webview_t w);
 #import <Cocoa/Cocoa.h>
 #import <WebKit/WebKit.h>
 
+/* Hook eseguito appena prima che l'app termini (quit, ⌘Q o chiusura finestra):
+ * app.cc lo imposta a stop_server, così il server Python viene fermato in modo
+ * AFFIDABILE. [NSApp terminate:] non torna mai dopo [NSApp run] e gli handler
+ * atexit non sono garantiti, mentre applicationWillTerminate: viene sempre
+ * chiamato da terminate:. */
+static void (*g_on_terminate)(void) = NULL;
+
 /* Quit the app when the window is closed. */
 @interface DS4WindowDelegate : NSObject <NSWindowDelegate>
 @end
 @implementation DS4WindowDelegate
 - (void)windowWillClose:(NSNotification *)note { (void)note; [NSApp terminate:nil]; }
+@end
+
+/* App delegate: ferma il server alla terminazione (qualunque sia la via) e
+ * fa uscire l'app quando l'ultima finestra si chiude. */
+@interface DS4AppDelegate : NSObject <NSApplicationDelegate>
+@end
+@implementation DS4AppDelegate
+- (void)applicationWillTerminate:(NSNotification *)note {
+    (void)note;
+    if (g_on_terminate) g_on_terminate();
+}
+- (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)app {
+    (void)app; return YES;
+}
 @end
 
 /* JS dialogs (alert/confirm/prompt) → native NSAlert panels. */
@@ -323,6 +344,8 @@ static webview_t webview_create(int width, int height, const char *title) {
     [NSApplication sharedApplication];
     /* Regular: Dock icon + menu bar like a real app. */
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+    /* delegate: ferma il server alla terminazione (vedi g_on_terminate) */
+    [NSApp setDelegate:[[DS4AppDelegate alloc] init]];
     ds4_build_menubar(title);
 
     ds4_wv *w = (ds4_wv *)calloc(1, sizeof(ds4_wv));

@@ -16,7 +16,7 @@ PYTHON   ?= $$HOME/.ccllrun/venv/bin/python
 
 all: $(BIN)
 
-$(BIN): native/app.cc native/webview.h native/Info.plist native/AppIcon.icns server.py permtool.py web/index.html web/icon.svg web/mark.svg web/vendor/mathjax/tex-svg.js ../ccllrun ../proxy.py
+$(BIN): native/app.cc native/webview.h native/Info.plist native/AppIcon.icns server.py permtool.py web/index.html web/icon.svg web/mark.svg web/vendor/mathjax/tex-svg.js web/vendor/xterm/xterm.js ../ccllrun ../proxy.py
 	@mkdir -p "$(APP)/Contents/MacOS" "$(APP)/Contents/Resources/web"
 	clang++ -x objective-c++ -std=c++17 -O2 \
 	    native/app.cc -o "$(BIN)" \

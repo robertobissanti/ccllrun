@@ -1,6 +1,7 @@
 .DS_Store
 __pycache__/
 *.pyc
+node_modules/
 *.un~
 # il bundle .app è un artefatto di build (make in studio/)
 studio/ccllrun Studio.app/

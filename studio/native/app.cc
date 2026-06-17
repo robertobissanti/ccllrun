@@ -86,7 +86,18 @@ static void resources_dir(char *out, size_t cap) {
 
 static pid_t g_server_pid = 0;
 static void stop_server(void) {
-    if (g_server_pid > 0) { kill(g_server_pid, SIGTERM); g_server_pid = 0; }
+    pid_t pid = g_server_pid;
+    if (pid <= 0) return;
+    g_server_pid = 0;
+    kill(pid, SIGTERM);                       /* → server.py: on_cleanup ferma lo stack */
+    /* attendi che il server completi il cleanup (stop dello stack) prima di
+     * uscire: fino a ~6 s, poi forza con SIGKILL se è ancora vivo */
+    for (int i = 0; i < 60; i++) {
+        if (waitpid(pid, NULL, WNOHANG) != 0) return;
+        usleep(100 * 1000);
+    }
+    kill(pid, SIGKILL);
+    waitpid(pid, NULL, 0);
 }
 
 int main(void) {
@@ -117,12 +128,19 @@ int main(void) {
     pid_t pid = fork();
     if (pid < 0) { perror("fork"); return 1; }
     if (pid == 0) {
+        char parent_s[32];
+        snprintf(parent_s, sizeof parent_s, "%d", (int)getppid());
+        setenv("STUDIO_PARENT_PID", parent_s, 1);
         execlp(python, python, server_py, (char *)NULL);
         perror("exec server.py");
         _exit(1);
     }
     g_server_pid = pid;
-    atexit(stop_server);   /* [NSApp terminate] chiama exit() → fermiamo il server */
+    /* terminazione affidabile: applicationWillTerminate: (vedi webview.h) chiama
+     * stop_server qualunque sia la via di uscita (⌘Q, chiusura finestra, menu).
+     * atexit resta come rete di sicurezza per i percorsi non-Cocoa. */
+    g_on_terminate = stop_server;
+    atexit(stop_server);
 
     if (!wait_for_port(port, 8000))
         fprintf(stderr, "ccllrun Studio: server non pronto su :%d, apro comunque la finestra\n", port);

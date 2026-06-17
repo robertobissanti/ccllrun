@@ -17,6 +17,9 @@
   };
 </script>
 <script defer src="/vendor/mathjax/tex-svg.js"></script>
+<link rel="stylesheet" href="/vendor/xterm/xterm.css">
+<script defer src="/vendor/xterm/xterm.js"></script>
+<script defer src="/vendor/xterm/xterm-addon-fit.js"></script>
 <style>
   :root {
     --bg: #262624; --panel: #2f2f2d; --panel2: #393937; --border: #44443f;
@@ -115,8 +118,118 @@
   #side .foot { padding: 10px 12px 2px; font-size: 10.5px; color: var(--dim); }
   #side .foot a { color: var(--dim); }
 
+  /* ---- pannello di lavoro (destra): file creati / task degli agenti ---- */
+  #workpanel { width: var(--wp-w, 320px); flex-shrink: 0; background: var(--side); border-left: 1px solid var(--border);
+               display: flex; flex-direction: column; position: relative; }
+  body.nowork #workpanel { display: none; }
+  /* maniglia di ridimensionamento sul bordo sinistro */
+  #wpGrip { position: absolute; left: -3px; top: 0; bottom: 0; width: 7px; cursor: col-resize; z-index: 5; }
+  #wpGrip::after { content: ""; position: absolute; left: 3px; top: 0; bottom: 0; width: 1px; background: transparent; }
+  #wpGrip:hover::after, body.wpResizing #wpGrip::after { background: var(--accent); }
+  body.wpResizing { cursor: col-resize; user-select: none; }
+  #wpHead { display: flex; align-items: center; gap: 4px; padding: 7px 8px 7px 10px; border-bottom: 1px solid var(--border); }
+  #wpHead .wpClose { margin-left: auto; }
+  #wpTabs { display: flex; gap: 2px; flex: 1; overflow-x: auto; }
+  .wpTab { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 8px;
+           font-size: 12px; color: var(--dim); cursor: pointer; white-space: nowrap; user-select: none; }
+  .wpTab:hover { background: var(--panel); color: var(--text); }
+  .wpTab.on { background: var(--panel2); color: var(--text); }
+  .wpTab .uiIcon { width: 14px; height: 14px; }
+  .wpTab .cnt { background: var(--side); border-radius: 9px; padding: 0 6px; font-size: 10px; color: var(--dim); }
+  .wpTab.on .cnt { color: var(--text); }
+  #wpBody { flex: 1; overflow-y: auto; padding: 6px 10px 14px; }
+  #wpBody .wpSect { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .8px;
+                    padding: 12px 6px 6px; display: flex; align-items: center; gap: 6px; }
+  #wpBody .wpSect .cnt { background: var(--panel2); border-radius: 10px; padding: 0 7px; font-size: 10.5px;
+                         letter-spacing: 0; color: var(--text); }
+  #wpBody .wpEmpty { color: var(--dim); font-size: 12px; padding: 4px 8px 8px; font-style: italic; }
+  .wfile { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 8px; cursor: default;
+           color: var(--text); }
+  .wfile:hover { background: var(--panel); }
+  .wfile .ic { color: var(--dim); line-height: 0; flex-shrink: 0; }
+  .wfile .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+  .wfile .pth { color: var(--dim); font-size: 10.5px; font-family: var(--mono); overflow: hidden;
+                text-overflow: ellipsis; white-space: nowrap; }
+  .wfile .tag { flex-shrink: 0; font-size: 9.5px; text-transform: uppercase; letter-spacing: .4px;
+                padding: 1px 6px; border-radius: 6px; background: var(--panel2); color: var(--dim); }
+  .wfile .tag.new { background: color-mix(in srgb, var(--ok) 22%, transparent); color: var(--ok); }
+  .wfile .tag.edit { background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--warn); }
+  .wtask { display: flex; align-items: flex-start; gap: 8px; padding: 8px; border-radius: 8px; }
+  .wtask:hover { background: var(--panel); }
+  .wtask .st { flex-shrink: 0; margin-top: 1px; line-height: 0; }
+  .wtask .st .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .wtask .st .dot.run { background: var(--warn); animation: wtaskPulse 1.1s ease-in-out infinite; }
+  .wtask .st .dot.done { background: var(--ok); }
+  @keyframes wtaskPulse { 50% { opacity: .35; } }
+  .wtask .tx { flex: 1; min-width: 0; }
+  .wtask .tx .ti { font-size: 12.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wtask .tx .de { color: var(--dim); font-size: 11px; margin-top: 1px; overflow: hidden;
+                   text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  /* piano (TodoWrite): passi con stato pending/in_progress/completed */
+  .wstep { display: flex; align-items: flex-start; gap: 8px; padding: 6px 8px; border-radius: 8px; font-size: 12.5px; }
+  .wstep:hover { background: var(--panel); }
+  .wstep .bx { flex-shrink: 0; width: 15px; height: 15px; margin-top: 1px; line-height: 0; color: var(--dim); }
+  .wstep.completed .bx { color: var(--ok); }
+  .wstep.in_progress .bx { color: var(--warn); }
+  .wstep.completed .lb { color: var(--dim); text-decoration: line-through; }
+  .wstep .lb { flex: 1; min-width: 0; }
+  /* diff: blocchi per file con righe +/- */
+  .wdiff { margin: 6px 0 10px; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
+  .wdiff .dh { display: flex; align-items: center; gap: 7px; padding: 6px 9px; background: var(--panel2);
+               font: 11px var(--mono); color: var(--text); }
+  .wdiff .dh .dn { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wdiff .dh .dc { font-size: 10px; }
+  .wdiff .dc .pl { color: var(--ok); } .wdiff .dc .mn { color: var(--err); }
+  .wdiff pre { margin: 0; padding: 7px 9px; overflow-x: auto; background: var(--logbg); font: 11px/1.45 var(--mono); }
+  .wdiff pre .pl { color: var(--ok); display: block; }
+  .wdiff pre .mn { color: var(--err); display: block; }
+  .wdiff pre .cx { color: var(--logtx); display: block; }
+  /* terminale embeddato (xterm.js) */
+  #wpBody.term { padding: 0; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+  #wterm { width: 100%; flex: 1; min-height: 0; }
+  #wterm .xterm { height: 100%; padding: 6px 8px; }
+  #wterm .xterm-viewport { background: transparent !important; }
+  .wtermBar { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-bottom: 1px solid var(--border);
+              font-size: 11px; color: var(--dim); font-family: var(--mono); }
+  .wtermBar .err { color: var(--err); }
+  /* anteprima file (html/markdown/svg renderizzati) */
+  .wprevPick { display: flex; gap: 6px; flex-wrap: wrap; padding: 2px 0 8px; }
+  .wprevPick .chip { cursor: pointer; }
+  .wprevPick .chip.on { border-color: var(--accent); color: var(--text); }
+  .wprevFrame { width: 100%; height: calc(100% - 40px); min-height: 360px; border: 1px solid var(--border);
+                border-radius: 9px; background: #fff; }
+  .wprevMd { padding: 4px 2px; }
+  /* menu a tendina del pannello (stile Claude Code) */
+  #wpMenuWrap { position: relative; }
+  /* pulsanti del pannello: quadrati con angoli morbidi, MAI cerchio */
+  .wpBtn { display: inline-flex; align-items: center; justify-content: center; gap: 1px; height: 32px; padding: 0 7px;
+           background: none; border: 1px solid transparent; border-radius: 8px; color: var(--dim); cursor: pointer; }
+  .wpBtn:hover { background: var(--panel); color: var(--text); border-color: transparent; }
+  .wpBtn svg { width: 16px; height: 16px; stroke: currentColor; fill: none;
+               stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .wpClose { width: 32px; padding: 0; }
+  .wpToggle { width: 32px; padding: 0; }
+  .wpToggle .open { display: none; }
+  .wpToggle.on { color: var(--accent); background: var(--panel); }
+  .wpToggle.on .closed { display: none; }
+  .wpToggle.on .open { display: inline-block; }
+  body.nowork #wpMenuWrap { display: none; }
+  #btnWorkMenu .chev { transition: transform .15s; }
+  #btnWorkMenu[aria-expanded="true"] .chev { transform: rotate(180deg); }
+  #wpMenu { display: none; position: absolute; top: calc(100% + 6px); right: 0; z-index: 30; min-width: 240px;
+            background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 5px;
+            box-shadow: 0 10px 34px rgba(0,0,0,.32); }
+  #wpMenu.open { display: block; }
+  .wpMenuItem { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px;
+                font-size: 13px; color: var(--text); cursor: pointer; user-select: none; }
+  .wpMenuItem:hover { background: var(--panel2); }
+  .wpMenuItem .mi { width: 17px; height: 17px; flex-shrink: 0; line-height: 0; color: var(--dim); }
+  .wpMenuItem .ml { flex: 1; }
+  .wpMenuItem .mck { width: 16px; flex-shrink: 0; color: var(--accent); line-height: 0; }
+  .wpMenuItem .mck svg { width: 15px; height: 15px; }
+
   /* ---- main ---- */
-  #main { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+  #main { flex: 1; overflow-y: auto; display: flex; flex-direction: column; min-width: 0; }
   .page { display: none; flex: 1; }
   .page.on { display: block; }
   .pad { padding: 26px 32px; max-width: 1000px; }
@@ -168,6 +281,15 @@
   .msg .think { color: var(--dim); font-size: 12px; border-left: 2px solid var(--border); padding-left: 10px;
                 margin-bottom: 8px; white-space: pre-wrap; }
   .msg .tools { color: var(--dim); font-size: 11.5px; font-family: var(--mono); }
+  /* streaming token-per-token (switch "Token live"): pensiero attenuato sopra,
+     testo della risposta sotto. Sostituiti dal blocco finale a turno concluso. */
+  .liveThink { color: var(--dim); font-size: 12px; border-left: 2px solid var(--border);
+               padding-left: 10px; margin-bottom: 6px; white-space: pre-wrap; word-break: break-word; }
+  .liveThink::before { content: "ragionamento"; display: block; font-size: 10px; text-transform: uppercase;
+                       letter-spacing: .6px; opacity: .7; margin-bottom: 2px; }
+  .liveText { white-space: pre-wrap; word-break: break-word; }
+  .liveCaret::after { content: "▍"; color: var(--accent); animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
   /* card di approvazione permessi (richieste interattive dal permtool) */
   .permCard { background: var(--panel); border: 1px solid var(--warn); border-radius: 12px;
               padding: 11px 14px; margin: 10px 0; }
@@ -405,6 +527,17 @@
       <span id="chatDirs"></span>
       <span class="chip add" id="chatAddDir"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M3 6.5h7l2 2h9v9.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 8.5h18M12 12v5M9.5 14.5h5"/></svg> +</span>
       <span style="margin-left:auto"></span>
+      <button class="wpBtn wpToggle" id="btnWorkToggle" title="Apri pannello laterale" aria-pressed="false">
+        <svg class="uiIcon closed" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="3"/><path d="M15 5v14"/></svg>
+        <svg class="uiIcon open" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="3"/><path d="M9 5v14"/></svg>
+      </button>
+      <div id="wpMenuWrap">
+        <button class="wpBtn" id="btnWorkMenu" title="Sezioni pannello" aria-haspopup="true" aria-expanded="false">
+          <svg class="uiIcon" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg>
+          <svg class="uiIcon chev" viewBox="0 0 24 24" style="width:13px;margin:0 -2px 0 1px"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div id="wpMenu"></div>
+      </div>
       <button class="launchBtn" id="btnLaunch" title="Apri questa chat in Claude Code nel Terminale">
         <svg class="uiIcon" viewBox="0 0 24 24"><path d="M4 7h16v10H4z"/><path d="m7 10 2.5 2L7 14M12 14h4M14 4h6v6M20 4l-7 7"/></svg>
         Apri in Claude Code
@@ -434,6 +567,11 @@
             <option value="plan">solo piano</option>
           </select>
           <svg class="uiIcon chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+        </label>
+        <label class="permChip" id="liveChip" title="Mostra i token mentre il modello li produce (pensiero + risposta in tempo reale), invece dello spinner. Aumenta un po' il traffico.">
+          <svg class="uiIcon" viewBox="0 0 24 24"><path d="M3 12h4l2 5 4-12 2 7h6"/></svg>
+          <span>Token live</span>
+          <span class="sw" style="margin-left:2px"><input type="checkbox" id="liveTok"><span class="tk"></span></span>
         </label>
       </div>
     </div>
@@ -507,6 +645,18 @@
 
 </div>
 
+<!-- ============ PANNELLO DI LAVORO (destra) ============ -->
+<aside id="workpanel">
+  <div id="wpGrip" title="Trascina per ridimensionare"></div>
+  <div id="wpHead">
+    <span id="wpTabs"></span>
+    <button class="wpBtn wpClose" id="btnWorkClose" title="Chiudi" aria-label="Chiudi pannello">
+      <svg class="uiIcon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+  <div id="wpBody"></div>
+</aside>
+
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
@@ -560,6 +710,7 @@ function navTo(page) {
   if (page === "home") { renderRecents(); $("#homeInp").focus(); }
   if (page === "logs") loadLogs();
   if (page === "config") loadConfig();
+  applyWorkVisibility();
 }
 
 /* ============ menu comandi slash (come Claude Code quando digiti /) ============ */
@@ -715,6 +866,7 @@ function openChat(id) {
   });
   // se in questa chat c'è un'inferenza in corso, riaggancia il suo fumetto vivo
   if (activeTurn && activeTurn.sid === id) $("#msgs").appendChild(activeTurn.div);
+  rebuildWork(s); renderWork(s); applyWorkVisibility();
   refreshTall();
   $("#msgs").scrollTop = $("#msgs").scrollHeight;
   $("#inp").focus();
@@ -735,6 +887,16 @@ $("#permSel").onchange = () => {
   $("#stats").textContent = s.permMode === "bypassPermissions"
     ? "permessi: tutto consentito — Claude può eseguire qualsiasi comando in questa chat"
     : "permessi aggiornati per i prossimi turni";
+};
+/* Token live: preferenza UI globale (non per-chat). Vale dal turno successivo. */
+const LIVE_TOK_KEY = "ccllrun.liveTokens";
+function liveOn() { return localStorage.getItem(LIVE_TOK_KEY) === "1"; }
+$("#liveTok").checked = liveOn();
+$("#liveTok").onchange = () => {
+  localStorage.setItem(LIVE_TOK_KEY, $("#liveTok").checked ? "1" : "0");
+  $("#stats").textContent = $("#liveTok").checked
+    ? "token in tempo reale attivi — vedrai pensiero e risposta mentre arrivano (dal prossimo turno)"
+    : "token in tempo reale disattivati";
 };
 $("#chatAddDir").onclick = async () => {
   const s = cur(); if (!s) return;
@@ -929,6 +1091,396 @@ function summarizeToolUse(name, input) {
   return "🔧 " + name + (arg ? "(" + String(arg).split("/").slice(-2).join("/").slice(0, 60) + ")" : "");
 }
 
+/* ============ PANNELLO LATERALE ============
+   Stile Claude Code: l'icona "pannello" nel chatHead apre un menu a tendina con
+   le sezioni attivabili (spunta). Le sezioni reali — File, Attività in
+   background (Task), Piano (TodoWrite), Diff — sono ricavate dai blocchi
+   tool_use; Terminale è una shell PTY e Anteprima rende i file html/md/svg.
+   Lo stato si ricostruisce dai transcript salvati quando riapri la chat. */
+const WORK_HIDDEN_KEY = "ccllrun.workHidden";   // pannello chiuso del tutto
+const WORK_ON_KEY = "ccllrun.workSections";     // sezioni attive (CSV)
+const WORK_TAB_KEY = "ccllrun.workTab";         // tab attualmente in vista
+const FILE_ICON = '<svg class="uiIcon" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/></svg>';
+const CHECK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17l9-10"/></svg>';
+
+/* le sei voci della tendina (come Claude Code). available=false → grigia */
+const WP_SECTIONS = [
+  { id: "preview",  label: "Anteprima",              icon: '<path d="M8 5v14l11-7z"/>', available: true },
+  { id: "diff",     label: "Diff",                   icon: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M12 8v8M8 12h8" stroke-dasharray="0"/>', available: true },
+  { id: "terminal", label: "Terminale",              icon: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/>', available: true },
+  { id: "files",    label: "File",                   icon: '<path d="M3 6.5h7l2 2h9v9.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>', available: true },
+  { id: "tasks",    label: "Attività in background", icon: '<path d="M8 6 3 12l5 6M16 6l5 6-5 6"/>', available: true },
+  { id: "plan",     label: "Piano",                  icon: '<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6h.01M4 12h.01M4 18h.01"/>', available: true },
+];
+const WP_DEFAULT_ON = ["files", "tasks", "plan"];
+
+function ensureWork(s) {
+  if (!s.work) s.work = {};
+  s.work.files = s.work.files || {};
+  s.work.tasks = s.work.tasks || [];
+  s.work.plan  = s.work.plan  || [];
+  s.work.diffs = s.work.diffs || {};   // path → { name, plus, minus, lines:[{k,t}] }
+  return s.work;
+}
+
+/* aggiorna s.work da un singolo tool_use (non salva: lo fa il chiamante) */
+function trackWork(s, name, input) {
+  const w = ensureWork(s);
+  const i = input || {};
+  if (name === "Write" || name === "Edit" || name === "MultiEdit" || name === "NotebookEdit") {
+    const p = i.file_path || i.path || i.notebook_path;
+    if (!p) return;
+    const prev = w.files[p];
+    const kind = (name === "Write" && !prev) ? "new" : "edit";
+    w.files[p] = { kind: prev?.kind === "new" ? "new" : kind, edits: (prev?.edits || 0) + 1, ts: Date.now() };
+    addDiff(w, p, name, i);
+  } else if (name === "Task") {
+    const desc = i.description || i.prompt || "(task)";
+    const last = w.tasks[w.tasks.length - 1];
+    if (last && last.status === "run") last.status = "done";
+    w.tasks.push({ title: (i.subagent_type || "agent"), desc: String(desc).slice(0, 160), status: "run", ts: Date.now() });
+  } else if (name === "TodoWrite" && Array.isArray(i.todos)) {
+    // TodoWrite riscrive l'intero piano: l'ultimo blocco è lo stato corrente
+    w.plan = i.todos.map(t => ({ content: t.content || t.activeForm || "", status: t.status || "pending" }));
+  } else if (name === "ExitPlanMode" && i.plan) {
+    w.planText = String(i.plan);
+  }
+}
+
+/* costruisce il diff di un file da Edit/MultiEdit/Write (best-effort, dai soli
+   campi old_string/new_string disponibili nel tool_use) */
+function addDiff(w, p, name, i) {
+  const d = w.diffs[p] || { name: fileName(p), path: p, plus: 0, minus: 0, lines: [] };
+  const push = (k, txt) => String(txt).split("\n").forEach(t => {
+    d.lines.push({ k, t });
+    if (k === "pl") d.plus++; else if (k === "mn") d.minus++;
+  });
+  if (name === "Write") { d.lines = []; d.plus = d.minus = 0; push("pl", i.content || ""); }
+  else if (name === "MultiEdit" && Array.isArray(i.edits)) {
+    for (const e of i.edits) { push("mn", e.old_string || ""); push("pl", e.new_string || ""); }
+  } else { push("mn", i.old_string || ""); push("pl", i.new_string || ""); }
+  w.diffs[p] = d;
+}
+
+/* ricostruisce s.work dall'intero transcript salvato (riapertura chat) */
+function rebuildWork(s) {
+  s.work = {};
+  for (const m of s.msgs || []) {
+    for (const b of m.transcript || []) {
+      if (b.t === "tool" && b.name) trackWork(s, b.name, b.input);
+    }
+  }
+  ensureWork(s);
+  for (const t of s.work.tasks) if (t.status === "run") t.status = "done";
+}
+
+function fileName(p) { return p.split("/").pop() || p; }
+function fileDir(p) { const parts = p.split("/"); parts.pop(); return parts.slice(-2).join("/"); }
+
+/* ---- sezioni attive (spunte della tendina) ---- */
+function workSections() {
+  const raw = localStorage.getItem(WORK_ON_KEY);
+  if (raw == null) return new Set(WP_DEFAULT_ON);
+  return new Set(raw ? raw.split(",") : []);
+}
+function setWorkSections(set) {
+  localStorage.setItem(WORK_ON_KEY, [...set].join(","));
+}
+function activeSectionDefs() {
+  const on = workSections();
+  return WP_SECTIONS.filter(sec => sec.available && on.has(sec.id));
+}
+function currentTab() {
+  const active = activeSectionDefs();
+  if (!active.length) return null;
+  const saved = localStorage.getItem(WORK_TAB_KEY);
+  return active.find(s => s.id === saved)?.id || active[0].id;
+}
+
+/* ---- rendering per sezione ---- */
+function renderSectionBody(s, secId) {
+  const w = ensureWork(s);
+  if (secId === "files") {
+    const files = Object.entries(w.files).sort((a, b) => b[1].ts - a[1].ts);
+    if (!files.length) return `<div class="wpEmpty">Nessun file ancora toccato.</div>`;
+    return files.map(([p, f]) => `
+      <div class="wfile" title="${esc(p)}${f.edits > 1 ? " · " + f.edits + " modifiche" : ""}">
+        <span class="ic">${FILE_ICON}</span>
+        <span class="nm">${esc(fileName(p))}<div class="pth">${esc(fileDir(p))}</div></span>
+        <span class="tag ${f.kind}">${f.kind === "new" ? "nuovo" : "modif."}</span>
+      </div>`).join("");
+  }
+  if (secId === "tasks") {
+    if (!w.tasks.length) return `<div class="wpEmpty">Nessuna attività in background.</div>`;
+    return w.tasks.slice().reverse().map(t => `
+      <div class="wtask">
+        <span class="st"><span class="dot ${t.status}" title="${t.status === "run" ? "in corso" : "completata"}"></span></span>
+        <span class="tx"><div class="ti">${esc(t.title)}</div><div class="de">${esc(t.desc)}</div></span>
+      </div>`).join("");
+  }
+  if (secId === "plan") {
+    if (!w.plan.length) return `<div class="wpEmpty">Nessun piano attivo.</div>`;
+    const box = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="3"/></svg>';
+    const chk = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8 12 3 3 5-6"/></svg>';
+    const run = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>';
+    return w.plan.map(t => `
+      <div class="wstep ${esc(t.status)}">
+        <span class="bx">${t.status === "completed" ? chk : t.status === "in_progress" ? run : box}</span>
+        <span class="lb">${esc(t.content)}</span>
+      </div>`).join("");
+  }
+  if (secId === "diff") {
+    const diffs = Object.values(w.diffs);
+    if (!diffs.length) return `<div class="wpEmpty">Nessuna modifica da mostrare.</div>`;
+    return diffs.map(d => {
+      const rows = d.lines.slice(0, 400).map(l =>
+        `<span class="${l.k}">${l.k === "pl" ? "+" : l.k === "mn" ? "-" : " "}${esc(l.t)}</span>`).join("");
+      return `<div class="wdiff">
+        <div class="dh"><span class="dn" title="${esc(d.path)}">${esc(d.name)}</span>
+          <span class="dc"><span class="pl">+${d.plus}</span> <span class="mn">−${d.minus}</span></span></div>
+        <pre>${rows}</pre></div>`;
+    }).join("");
+  }
+  return "";
+}
+
+function countFor(s, secId) {
+  const w = ensureWork(s);
+  if (secId === "files")   return Object.keys(w.files).length;
+  if (secId === "tasks")   return w.tasks.length;
+  if (secId === "plan")    return w.plan.length;
+  if (secId === "diff")    return Object.keys(w.diffs).length;
+  if (secId === "preview") return previewableFiles(s).length;
+  return 0;
+}
+
+/* Sezioni "vive": terminale (xterm+WS) e anteprima (iframe) vanno montate UNA
+   volta e non rigenerate a ogni aggiornamento dati, altrimenti si perderebbe la
+   sessione/lo scroll. wpMounted ricorda cosa c'è nel body. */
+let wpMounted = { tab: null, sid: null };
+
+function unmountLive() {
+  if (wpTerm) { try { wpTermWS?.close(); } catch {} try { wpTerm.dispose(); } catch {}
+                wpTerm = null; wpTermWS = null; wpFit = null; }
+}
+
+/* disegna i tab del pannello e il corpo della sezione corrente */
+function renderWork(s, opts = {}) {
+  if (!s) { $("#wpTabs").innerHTML = ""; $("#wpBody").innerHTML = ""; unmountLive(); wpMounted = {}; return; }
+  const active = activeSectionDefs();
+  const tab = currentTab();
+  $("#wpTabs").innerHTML = active.map(sec => {
+    const c = countFor(s, sec.id);
+    return `<span class="wpTab ${sec.id === tab ? "on" : ""}" data-tab="${sec.id}">
+      <svg class="uiIcon" viewBox="0 0 24 24">${sec.icon}</svg>${esc(sec.label)}${c ? `<span class="cnt">${c}</span>` : ""}</span>`;
+  }).join("");
+  $("#wpTabs").querySelectorAll(".wpTab").forEach(el => el.onclick = () => {
+    localStorage.setItem(WORK_TAB_KEY, el.dataset.tab); renderWork(s, { force: true });
+  });
+
+  const body = $("#wpBody");
+  body.classList.toggle("term", tab === "terminal");
+  // se il tab vivo è già montato per questa sessione, non lo ricostruisco
+  const sameLive = (tab === "terminal" || tab === "preview")
+                   && wpMounted.tab === tab && wpMounted.sid === s.id && !opts.force;
+  if (sameLive) { if (tab === "preview") refreshPreviewPicker(s); return; }
+
+  unmountLive();
+  wpMounted = { tab, sid: s.id };
+  if (!tab) { body.innerHTML = `<div class="wpEmpty">Nessuna sezione attiva.</div>`; return; }
+  if (tab === "terminal") { mountTerminal(s); return; }
+  if (tab === "preview")  { mountPreview(s); return; }
+  body.innerHTML = renderSectionBody(s, tab);
+}
+
+/* ---------- TERMINALE: xterm.js su WebSocket /api/term ---------- */
+let wpTerm = null, wpTermWS = null, wpFit = null;
+
+function mountTerminal(s) {
+  const body = $("#wpBody");
+  const cwd = s.dirs[0] || "";
+  if (typeof Terminal === "undefined") {
+    body.classList.remove("term");
+    body.innerHTML = `<div class="wpEmpty">Terminale non disponibile (xterm non caricato).</div>`;
+    return;
+  }
+  body.innerHTML = `<div class="wtermBar"><span id="wtermStat">connessione…</span></div><div id="wterm"></div>`;
+  const cssText = v => getComputedStyle(document.body).getPropertyValue(v).trim();
+  wpTerm = new Terminal({
+    fontFamily: 'var(--mono), "SF Mono", Menlo, monospace', fontSize: 12, cursorBlink: true,
+    theme: { background: "rgba(0,0,0,0)", foreground: cssText("--text") || "#ddd",
+             cursor: cssText("--accent") || "#c96442" },
+  });
+  wpFit = new FitAddon.FitAddon();
+  wpTerm.loadAddon(wpFit);
+  wpTerm.open($("#wterm"));
+
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  const qs = new URLSearchParams({ csrf: "ccllrun-studio", cwd,
+    cols: String(wpTerm.cols || 80), rows: String(wpTerm.rows || 24) });
+  const ws = new WebSocket(`${proto}://${location.host}/api/term?${qs}`);
+  ws.binaryType = "arraybuffer";
+  wpTermWS = ws;
+  const stat = txt => { const el = $("#wtermStat"); if (el) el.innerHTML = txt; };
+  ws.onopen = () => stat(cwd ? esc(cwd) : "~");
+  ws.onmessage = e => wpTerm.write(typeof e.data === "string" ? e.data : new Uint8Array(e.data));
+  ws.onclose = () => stat('<span class="err">sessione chiusa</span> — riapri il tab per ricominciare');
+  ws.onerror = () => stat('<span class="err">errore di connessione</span>');
+  wpTerm.onData(d => { if (ws.readyState === 1) ws.send(d); });
+  const sendResize = () => {
+    if (ws.readyState === 1) ws.send(JSON.stringify({ resize: [wpTerm.cols, wpTerm.rows] }));
+  };
+  wpTerm.onResize(sendResize);
+  const fitAndResize = () => {
+    try { wpFit.fit(); sendResize(); } catch {}
+  };
+  setTimeout(fitAndResize, 30);
+  // refit quando la finestra cambia (il pannello è a larghezza fissa, ma l'altezza sì)
+  if (!mountTerminal._ro) {
+    mountTerminal._ro = new ResizeObserver(() => { if (wpFit) fitAndResize(); });
+  }
+  mountTerminal._ro.disconnect(); mountTerminal._ro.observe($("#wterm"));
+  setTimeout(() => wpTerm?.focus(), 60);
+}
+
+/* ---------- ANTEPRIMA: render di file html/markdown/svg toccati ---------- */
+function previewableFiles(s) {
+  const w = ensureWork(s);
+  return Object.keys(w.files).filter(p => /\.(html?|md|markdown|svg)$/i.test(p))
+    .sort((a, b) => w.files[b].ts - w.files[a].ts);
+}
+
+function mountPreview(s) {
+  const files = previewableFiles(s);
+  if (!files.length) {
+    $("#wpBody").innerHTML = `<div class="wpEmpty">Nessun file anteprimabile (.html, .md, .svg) toccato in questa chat.</div>`;
+    return;
+  }
+  $("#wpBody").innerHTML = `<div class="wprevPick"></div><div id="wprevHost" style="height:calc(100% - 40px)"></div>`;
+  if (!s.work.prevSel || !files.includes(s.work.prevSel)) s.work.prevSel = files[0];
+  refreshPreviewPicker(s);
+  loadPreview(s, s.work.prevSel);
+}
+
+function refreshPreviewPicker(s) {
+  const pick = $("#wpBody .wprevPick"); if (!pick) return;
+  const files = previewableFiles(s);
+  pick.innerHTML = files.map(p =>
+    `<span class="chip ${p === s.work.prevSel ? "on" : ""}" data-p="${esc(p)}">${esc(fileName(p))}</span>`).join("");
+  pick.querySelectorAll(".chip").forEach(c => c.onclick = () => {
+    s.work.prevSel = c.dataset.p; refreshPreviewPicker(s); loadPreview(s, c.dataset.p);
+  });
+}
+
+async function loadPreview(s, path) {
+  const host = $("#wprevHost"); if (!host) return;
+  host.innerHTML = `<div class="wpEmpty">caricamento…</div>`;
+  let j;
+  try { j = await (await fetch("/api/file?path=" + encodeURIComponent(path))).json(); }
+  catch (e) { host.innerHTML = `<div class="wpEmpty">errore: ${esc(String(e))}</div>`; return; }
+  if (!j.ok) { host.innerHTML = `<div class="wpEmpty">${esc(j.error || "non leggibile")}</div>`; return; }
+  const ext = j.ext;
+  if (ext === "md" || ext === "markdown") {
+    host.innerHTML = "";
+    const div = document.createElement("div");
+    div.className = "body md wprevMd"; div.innerHTML = mdToHtml(j.text);
+    wireCodeCopy(div); typesetMath(div); host.appendChild(div);
+  } else {                                  // html o svg: in iframe sandboxed
+    host.innerHTML = `<iframe class="wprevFrame" sandbox="allow-same-origin"></iframe>`;
+    const doc = host.querySelector("iframe").contentDocument;
+    doc.open(); doc.write(j.text); doc.close();
+  }
+}
+
+/* ---- visibilità del pannello ---- */
+function workHidden() { return localStorage.getItem(WORK_HIDDEN_KEY) === "1"; }
+function applyWorkVisibility() {
+  const onChat = currentPage() === "chat";
+  const open = onChat && !workHidden() && activeSectionDefs().length > 0;
+  document.body.classList.toggle("nowork", !open);
+  $("#btnWorkToggle")?.classList.toggle("on", open);
+  $("#btnWorkToggle")?.setAttribute("aria-pressed", open ? "true" : "false");
+  $("#btnWorkToggle")?.setAttribute("title", open ? "Chiudi pannello laterale" : "Apri pannello laterale");
+  if (!open) toggleWpMenu(false);
+}
+function setWorkHidden(h) { localStorage.setItem(WORK_HIDDEN_KEY, h ? "1" : "0"); applyWorkVisibility(); }
+function toggleWorkPanel() {
+  const open = currentPage() === "chat" && !workHidden() && activeSectionDefs().length > 0;
+  if (open) { setWorkHidden(true); return; }
+  if (!activeSectionDefs().length) setWorkSections(new Set(WP_DEFAULT_ON));
+  setWorkHidden(false);
+  const s = cur(); if (s) renderWork(s, { force: true });
+}
+
+/* ---- ridimensionamento (maniglia sul bordo sinistro) ---- */
+const WORK_W_KEY = "ccllrun.workWidth";
+const WP_MIN = 240, WP_MAX_FRAC = 0.7;   // min px, max % della finestra
+function applyWorkWidth(px) {
+  const max = Math.round(window.innerWidth * WP_MAX_FRAC);
+  const w = Math.max(WP_MIN, Math.min(max, px));
+  document.documentElement.style.setProperty("--wp-w", w + "px");
+  return w;
+}
+{
+  const saved = parseInt(localStorage.getItem(WORK_W_KEY) || "", 10);
+  if (saved) applyWorkWidth(saved);
+  const grip = $("#wpGrip");
+  grip.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    grip.setPointerCapture(e.pointerId);
+    document.body.classList.add("wpResizing");
+    const onMove = ev => {
+      // il pannello è ancorato a destra: larghezza = distanza dal bordo destro
+      const w = applyWorkWidth(window.innerWidth - ev.clientX);
+      // il terminale segue la nuova larghezza
+      if (wpFit) try { wpFit.fit(); } catch {}
+      grip._w = w;
+    };
+    const onUp = ev => {
+      document.body.classList.remove("wpResizing");
+      grip.releasePointerCapture?.(e.pointerId);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      if (grip._w) localStorage.setItem(WORK_W_KEY, String(grip._w));
+      if (wpFit) try { wpFit.fit(); } catch {}
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  });
+}
+
+/* ---- menu a tendina ---- */
+function renderWpMenu() {
+  const on = workSections();
+  $("#wpMenu").innerHTML = WP_SECTIONS.map(sec => `
+    <div class="wpMenuItem" data-sec="${sec.id}">
+      <span class="mi"><svg class="uiIcon" viewBox="0 0 24 24">${sec.icon}</svg></span>
+      <span class="ml">${esc(sec.label)}</span>
+      <span class="mck">${on.has(sec.id) ? CHECK_ICON : ""}</span>
+    </div>`).join("");
+  $("#wpMenu").querySelectorAll(".wpMenuItem").forEach(el => el.onclick = () => {
+    const set = workSections(); const id = el.dataset.sec;
+    set.has(id) ? set.delete(id) : set.add(id);
+    setWorkSections(set);
+    renderWpMenu(); applyWorkVisibility();
+    const s = cur(); if (s) renderWork(s);
+  });
+}
+function toggleWpMenu(force) {
+  if (document.body.classList.contains("nowork")) force = false;
+  const open = force ?? !$("#wpMenu").classList.contains("open");
+  $("#wpMenu").classList.toggle("open", open);
+  $("#btnWorkMenu").setAttribute("aria-expanded", open ? "true" : "false");
+  if (open) renderWpMenu();
+}
+$("#btnWorkToggle").onclick = e => { e.stopPropagation(); toggleWorkPanel(); };
+$("#btnWorkMenu").onclick = e => { e.stopPropagation(); toggleWpMenu(); };
+document.addEventListener("click", e => {
+  if (!e.target.closest("#wpMenuWrap")) toggleWpMenu(false);
+});
+$("#btnWorkClose").onclick = () => setWorkHidden(true);
+applyWorkVisibility();
+
 /* Invio sempre possibile (come in Claude Code: i messaggi inviati durante
    l'inferenza vanno in coda e partono al turno successivo); lo stop appare
    solo durante lo streaming e uccide il processo claude di quel turno. */
@@ -1048,9 +1600,11 @@ async function runTurn(s, text) {
   if (cur() === s) $("#msgs").appendChild(div);
   activeTurn = { sid: s.id, div };
   const transcript = [];
+  // segnaposto vuoto: l'attesa è già segnalata dallo spinner sopra il composer,
+  // quindi nel fumetto non scriviamo "elaborazione…" (verrebbe solo rimosso al
+  // primo contenuto). Lo teniamo come ancora per la logica `pending`.
   let pending = document.createElement("div");
   pending.className = "body";
-  pending.textContent = "elaborazione…";
   content.appendChild(pending);
   const addBlock = (cls, txt) => {
     if (pending) { pending.remove(); pending = null; }
@@ -1058,6 +1612,26 @@ async function runTurn(s, text) {
     const el = document.createElement("div");
     el.className = cls; el.textContent = txt;
     content.appendChild(el);
+  };
+  // --- token live (--include-partial-messages): accumulo dei delta in due
+  // elementi "vivi" (ragionamento + testo). Il blocco assistant finale rimpiazza
+  // il testo vivo con la versione renderizzata; il ragionamento resta attenuato.
+  let liveThinkEl = null, liveTextEl = null;
+  const appendDelta = (kind, txt) => {
+    if (pending) { pending.remove(); pending = null; }
+    if (kind === "thinking") {
+      if (!liveThinkEl) { liveThinkEl = document.createElement("div"); liveThinkEl.className = "liveThink"; content.appendChild(liveThinkEl); }
+      liveThinkEl.textContent += txt;
+    } else {
+      if (!liveTextEl) { liveTextEl = document.createElement("div"); liveTextEl.className = "liveText liveCaret"; content.appendChild(liveTextEl); }
+      liveTextEl.textContent += txt;
+    }
+  };
+  const finalizeLiveText = () => {   // il blocco testo definitivo arriva: chiudi il vivo
+    if (liveTextEl) { liveTextEl.remove(); liveTextEl = null; }
+  };
+  const finalizeLiveThink = () => {
+    if (liveThinkEl) liveThinkEl.classList.remove("liveCaret");
   };
   const here = () => cur() === s;     // la chat di questo turno è quella visibile?
   // polling delle richieste di permesso in sospeso (permtool → /api/perm/ask)
@@ -1086,7 +1660,7 @@ async function runTurn(s, text) {
       body: JSON.stringify({ prompt: text, cwd: s.dirs[0] || null,
                              add_dirs: s.dirs.slice(1), session_id: s.claudeSid || null,
                              permission_mode: s.permMode || "acceptEdits",
-                             tool_search: s.toolSearch }) });
+                             tool_search: s.toolSearch, partial: liveOn() }) });
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "HTTP " + r.status);
     const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = "";
     for (;;) {
@@ -1100,18 +1674,30 @@ async function runTurn(s, text) {
         let ev; try { ev = JSON.parse(line); } catch { continue; }
         if (ev.type === "system" && ev.subtype === "init") {
           s.claudeSid = ev.session_id; save();
+        } else if (ev.type === "stream_event") {
+          // delta token-per-token (solo con switch "Token live")
+          const e = ev.event || {};
+          if (e.type === "content_block_delta") {
+            const d = e.delta || {};
+            if (d.type === "thinking_delta" && d.thinking) appendDelta("thinking", d.thinking);
+            else if (d.type === "text_delta" && d.text) appendDelta("text", d.text);
+          }
         } else if (ev.type === "assistant") {
           // tutto ciò che Claude Code scrive, nell'ordine in cui lo scrive:
           // testo e tool intercalati come nella TUI
+          finalizeLiveThink();
           for (const block of ev.message?.content || []) {
             if (block.type === "text" && block.text) {
+              finalizeLiveText();           // sostituisci il testo vivo col blocco renderizzato
               answer += (answer ? "\n\n" : "") + block.text;
               transcript.push({ t: "text", v: block.text });
               addBlock("body", block.text);
             } else if (block.type === "tool_use") {
               const sum = summarizeToolUse(block.name, block.input);
-              transcript.push({ t: "tool", v: sum });
+              transcript.push({ t: "tool", v: sum, name: block.name, input: block.input });
               addBlock("tools", sum);
+              trackWork(s, block.name, block.input);
+              if (here()) renderWork(s);
             }
           }
         } else if (ev.type === "result") {
@@ -1146,6 +1732,12 @@ async function runTurn(s, text) {
   }
   clearInterval(permTimer);
   if (pending) pending.remove();
+  finalizeLiveThink();
+  if (liveTextEl) liveTextEl.classList.remove("liveCaret");   // residuo senza blocco finale: tienilo, togli il cursore
+  // turno concluso: nessuna task è più in volo
+  const w = ensureWork(s);
+  for (const t of w.tasks) if (t.status === "run") t.status = "done";
+  if (here()) renderWork(s);
   activeTurn = null; aborter = null;
   if (!streaming) stopInferStats();
   if (here()) refreshTall();
@@ -1192,16 +1784,26 @@ refreshStatus(); setInterval(refreshStatus, 4000);
    /api/status: il label segue lastStatus, non un flag locale. */
 let srvBusy = false;
 const stackUp = () => !!(lastStatus?.servers?.proxy?.up || lastStatus?.servers?.big?.up);
+const srvAction = () => lastStatus?.studio?.action || {};
 function renderSrvButtons() {
   const t = $("#btnToggle");
+  const action = srvAction();
+  srvBusy = !!action.running;
   t.disabled = $("#btnRestart").disabled = srvBusy;
-  if (srvBusy) return;                       // durante l'azione il label resta spinner + "…"
+  if (srvBusy) {
+    const label = action.kind === "stop" ? "arresto…" : action.kind === "restart" ? "riavvio…" : "avvio…";
+    t.innerHTML = `<span class="spinner"></span>${esc(label)}`;
+    $("#startMsg").textContent = label;
+    return;
+  }
   t.textContent = stackUp() ? "■ Ferma server" : "▶ Avvia server";
   t.classList.toggle("primary", !stackUp());
+  if (action.output && action.ok === false) $("#startMsg").textContent = action.output;
 }
 async function srvRun(busyLabel, apis) {
   if (srvBusy) return;
-  srvBusy = true; renderSrvButtons();
+  srvBusy = true;
+  $("#btnToggle").disabled = $("#btnRestart").disabled = true;
   $("#btnToggle").innerHTML = `<span class="spinner"></span>${esc(busyLabel)}`;
   try {
     for (const a of apis) {
@@ -1211,7 +1813,7 @@ async function srvRun(busyLabel, apis) {
     }
   } catch (e) { $("#startMsg").textContent = "errore: " + e; }
   await refreshStatus();
-  srvBusy = false; renderSrvButtons();
+  renderSrvButtons();
 }
 $("#btnToggle").onclick = () => {
   if (stackUp()) return srvRun("arresto…", ["stop"]);
@@ -1220,7 +1822,7 @@ $("#btnToggle").onclick = () => {
 };
 $("#btnRestart").onclick = () => {
   $("#startMsg").textContent = "riavvio in corso…";
-  srvRun("riavvio…", ["stop", "start"]);
+  srvRun("riavvio…", ["restart"]);
 };
 
 /* ============ CONFIG ============ */
