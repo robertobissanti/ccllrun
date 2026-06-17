@@ -943,30 +943,63 @@ def safe_repo_id(repo):
 
 
 def model_dest(repo, filename):
-    rel = Path(filename).name
-    return Path.home() / ".lmstudio" / "models" / repo / rel
+    return Path.home() / ".lmstudio" / "models" / repo / filename
+
+
+def parse_formats(raw):
+    vals = {x.strip().lower() for x in (raw or "gguf").split(",") if x.strip()}
+    vals = vals & {"gguf", "mlx"}
+    return vals or {"gguf"}
+
+
+def file_format(path):
+    low = path.lower()
+    if low.endswith(".gguf"):
+        return "gguf"
+    if low.endswith((".safetensors", ".npz", ".json", ".txt", ".model")):
+        return "mlx"
+    return ""
 
 
 async def api_models_search(request):
-    q = (request.query.get("q") or "GGUF").strip()
+    q = (request.query.get("q") or "").strip()
+    formats = parse_formats(request.query.get("formats"))
     limit = max(1, min(30, int(request.query.get("limit", "12"))))
-    url = f"https://huggingface.co/api/models?search={quote_plus(q + ' GGUF')}&limit={limit}&sort=downloads&direction=-1"
+    queries = []
+    if "gguf" in formats:
+        queries.append((q + " GGUF").strip())
+    if "mlx" in formats:
+        queries.append((q + " MLX").strip())
+    out, seen = [], set()
     try:
         async with ClientSession(timeout=ClientTimeout(total=20)) as s:
-            async with s.get(url, headers={"User-Agent": "ccllrun-Studio/0.1"}) as r:
-                data = await r.json(content_type=None)
+            for query in queries:
+                url = f"https://huggingface.co/api/models?search={quote_plus(query)}&limit={limit}&sort=downloads&direction=-1"
+                async with s.get(url, headers={"User-Agent": "ccllrun-Studio/0.1"}) as r:
+                    data = await r.json(content_type=None)
+                for m in data if isinstance(data, list) else []:
+                    mid = m.get("id") or m.get("modelId")
+                    if not mid or mid in seen:
+                        continue
+                    seen.add(mid)
+                    tags = m.get("tags", [])
+                    low = " ".join([mid, *tags]).lower()
+                    fmt = "mlx" if "mlx" in low else "gguf" if "gguf" in low else ""
+                    if fmt and fmt not in formats:
+                        continue
+                    out.append({"id": mid, "format": fmt or ",".join(sorted(formats)),
+                                "downloads": m.get("downloads", 0), "likes": m.get("likes", 0),
+                                "tags": tags[:12],
+                                "updatedAt": m.get("lastModified") or m.get("createdAt") or ""})
     except Exception as exc:
         return web.json_response({"ok": False, "error": f"ricerca modelli non riuscita: {exc}"}, status=502)
-    out = []
-    for m in data if isinstance(data, list) else []:
-        out.append({"id": m.get("id") or m.get("modelId"), "downloads": m.get("downloads", 0),
-                    "likes": m.get("likes", 0), "tags": m.get("tags", [])[:12],
-                    "updatedAt": m.get("lastModified") or m.get("createdAt") or ""})
+    out.sort(key=lambda x: x.get("downloads", 0), reverse=True)
     return web.json_response({"ok": True, "models": [x for x in out if x["id"]]})
 
 
 async def api_models_files(request):
     repo = safe_repo_id(request.query.get("repo") or "")
+    formats = parse_formats(request.query.get("formats"))
     url = f"https://huggingface.co/api/models/{repo}/tree/main?recursive=1"
     try:
         async with ClientSession(timeout=ClientTimeout(total=25)) as s:
@@ -979,8 +1012,10 @@ async def api_models_files(request):
     files = []
     for f in data if isinstance(data, list) else []:
         path = f.get("path") or ""
-        if path.lower().endswith(".gguf"):
+        fmt = file_format(path)
+        if fmt in formats:
             files.append({"path": path, "size": f.get("size") or 0,
+                          "format": fmt,
                           "downloaded": model_dest(repo, path).is_file(),
                           "local": str(model_dest(repo, path))})
     files.sort(key=lambda x: (("mmproj" not in x["path"].lower()), x["path"].lower()))
@@ -1022,8 +1057,8 @@ async def api_models_download(request):
     data = await request.json()
     repo = safe_repo_id(data.get("repo") or "")
     file_path = data.get("path") or ""
-    if not file_path.lower().endswith(".gguf"):
-        return web.json_response({"ok": False, "error": "scegli un file .gguf"}, status=400)
+    if file_format(file_path) not in {"gguf", "mlx"}:
+        return web.json_response({"ok": False, "error": "scegli un file modello supportato"}, status=400)
     DOWNLOAD_SEQ += 1
     job_id = str(DOWNLOAD_SEQ)
     DOWNLOADS[job_id] = {"id": job_id, "repo": repo, "file": file_path, "status": "queued",

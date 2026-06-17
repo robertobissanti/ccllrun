@@ -463,6 +463,10 @@
   .modelTop input { flex: 1; min-width: 260px; background: var(--panel); color: var(--text);
                     border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; outline: none; }
   .modelTop input:focus { border-color: var(--accent); }
+  .formatBox { display: inline-flex; align-items: center; gap: 8px; background: var(--panel);
+               border: 1px solid var(--border); border-radius: 10px; padding: 0 12px; color: var(--text); }
+  .formatBox label { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--dim); }
+  .formatBox input { min-width: 0; width: auto; flex: 0 0 auto; accent-color: var(--accent); }
   .modelLayout { display: grid; grid-template-columns: minmax(280px, 390px) 1fr; gap: 14px; align-items: start; }
   .modelList, .fileList { display: grid; gap: 8px; }
   .modelItem, .fileItem, .downloadItem { background: var(--panel); border: 1px solid var(--border);
@@ -684,6 +688,10 @@
     <div class="sub">Cerca repository GGUF su Hugging Face, scarica file e imposta big/small nella configurazione.</div>
     <div class="modelTop">
       <input id="modelQuery" type="search" placeholder="Cerca modelli GGUF, es. Qwen3.6 35B">
+      <span class="formatBox" title="Includi o escludi formati dalla ricerca">
+        <label><input type="checkbox" id="fmtGguf" checked> GGUF</label>
+        <label><input type="checkbox" id="fmtMlx" checked> MLX</label>
+      </span>
       <button class="primary" id="btnModelSearch">Cerca</button>
       <button id="btnDownloads">Download</button>
     </div>
@@ -866,6 +874,13 @@ function navTo(page) {
 
 /* ============ download modelli Hugging Face ============ */
 let modelResults = [], selectedModel = "", modelFiles = [], downloadTimer = null;
+function modelFormats() {
+  const f = [];
+  if ($("#fmtGguf")?.checked) f.push("gguf");
+  if ($("#fmtMlx")?.checked) f.push("mlx");
+  if (!f.length) { $("#fmtGguf").checked = true; f.push("gguf"); }
+  return f.join(",");
+}
 const fmtBytes = b => {
   b = Number(b || 0);
   if (!b) return "dimensione sconosciuta";
@@ -875,11 +890,11 @@ const fmtBytes = b => {
 };
 
 async function searchModels() {
-  const q = $("#modelQuery").value.trim() || "GGUF";
+  const q = $("#modelQuery").value.trim();
   $("#modelMsg").textContent = "ricerca modelli…";
   $("#modelList").innerHTML = ""; $("#fileList").innerHTML = "";
   try {
-    const j = await fetchJson(apiUrl("/api/models/search", { q }));
+    const j = await fetchJson(apiUrl("/api/models/search", { q, formats: modelFormats() }));
     modelResults = j.models || [];
     $("#modelMsg").textContent = `${modelResults.length} repository`;
   } catch (e) {
@@ -893,7 +908,7 @@ function renderModels() {
   $("#modelList").innerHTML = modelResults.map(m => `
     <div class="modelItem ${m.id === selectedModel ? "on" : ""}" data-repo="${esc(m.id)}">
       <div class="name">${esc(m.id)}</div>
-      <div class="meta">${Number(m.downloads || 0).toLocaleString()} download · ${Number(m.likes || 0).toLocaleString()} like</div>
+      <div class="meta">${esc((m.format || "").toUpperCase())} · ${Number(m.downloads || 0).toLocaleString()} download · ${Number(m.likes || 0).toLocaleString()} like</div>
       <div class="meta">${esc((m.tags || []).slice(0, 5).join(" · "))}</div>
     </div>`).join("") || `<div class="sub">Nessun repository.</div>`;
   $("#modelList").querySelectorAll(".modelItem").forEach(el => el.onclick = () => loadModelFiles(el.dataset.repo));
@@ -903,7 +918,7 @@ async function loadModelFiles(repo) {
   selectedModel = repo; modelFiles = []; renderModels();
   $("#fileList").innerHTML = `<div class="sub">lettura file…</div>`;
   try {
-    const j = await fetchJson(apiUrl("/api/models/files", { repo }));
+    const j = await fetchJson(apiUrl("/api/models/files", { repo, formats: modelFormats() }));
     modelFiles = j.files || [];
   } catch (e) {
     $("#fileList").innerHTML = `<div class="sub">errore: ${esc(e.message)}</div>`;
@@ -913,16 +928,18 @@ async function loadModelFiles(repo) {
 }
 
 function renderModelFiles() {
-  $("#fileList").innerHTML = modelFiles.map((f, i) => `
+  const hasMlx = modelFiles.some(f => f.format === "mlx");
+  $("#fileList").innerHTML = `${hasMlx ? `<div class="fileItem"><div class="name">Repository MLX</div><div class="meta">Scarica tutti i file necessari mantenendo la struttura del repository.</div><div class="row"><button class="primary" id="btnDownloadAllMlx">Scarica tutti MLX</button></div></div>` : ""}` + modelFiles.map((f, i) => `
     <div class="fileItem">
       <div class="name">${esc(f.path)}</div>
-      <div class="meta">${fmtBytes(f.size)}${f.downloaded ? " · già presente" : ""}</div>
+      <div class="meta">${esc((f.format || "").toUpperCase())} · ${fmtBytes(f.size)}${f.downloaded ? " · già presente" : ""}</div>
       <div class="meta">${esc(f.local)}</div>
       <div class="row">
         <button class="primary" data-dl="${i}">${f.downloaded ? "Riscarica" : "Scarica"}</button>
         ${f.downloaded ? `<button data-apply="big:${i}">Usa come big</button><button data-apply="small:${i}">Usa come small</button>` : ""}
       </div>
-    </div>`).join("") || `<div class="sub">Nessun file GGUF trovato.</div>`;
+    </div>`).join("") || `<div class="sub">Nessun file per i formati selezionati.</div>`;
+  $("#btnDownloadAllMlx")?.addEventListener("click", () => modelFiles.filter(f => f.format === "mlx").forEach(startDownload));
   $("#fileList").querySelectorAll("button[data-dl]").forEach(btn => btn.onclick = () => startDownload(modelFiles[+btn.dataset.dl]));
   $("#fileList").querySelectorAll("button[data-apply]").forEach(btn => {
     btn.onclick = () => {
@@ -2508,6 +2525,8 @@ $("#btnDownloads").onclick = loadDownloads;
 $("#modelQuery").addEventListener("keydown", e => {
   if (e.key === "Enter") { e.preventDefault(); searchModels(); }
 });
+$("#fmtGguf").onchange = () => { if (selectedModel) loadModelFiles(selectedModel); };
+$("#fmtMlx").onchange = () => { if (selectedModel) loadModelFiles(selectedModel); };
 $("#skillSearch").oninput = renderSkills;
 $("#btnSkillReload").onclick = () => loadSkills(true);
 
