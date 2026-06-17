@@ -425,6 +425,24 @@
   .card .hint { color: var(--warn); font-size: 12px; margin-top: 8px; }
   .card .docActions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
   .card .docActions button { padding: 5px 9px; font-size: 12px; border-radius: 8px; }
+  .skillTop { display: flex; align-items: center; gap: 10px; margin: 12px 0 16px; flex-wrap: wrap; }
+  .skillTop input { width: min(420px, 100%); background: var(--panel); color: var(--text);
+                    border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; outline: none; }
+  .skillTop input:focus { border-color: var(--accent); }
+  .skillGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+  .skillCard { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+  .skillCard h3 { font-size: 13px; display: flex; gap: 8px; align-items: center; margin-bottom: 7px; }
+  .skillCard .kind { color: var(--accent); font: 11px var(--mono); border: 1px solid var(--border);
+                     border-radius: 8px; padding: 1px 7px; }
+  .skillCard .src { color: var(--dim); font: 11px var(--mono); margin-left: auto; }
+  .skillCard .desc { color: var(--text); font-size: 12.5px; min-height: 36px; }
+  .skillCard .path { color: var(--dim); font: 10.5px var(--mono); margin-top: 8px; word-break: break-all; }
+  .skillCard details { margin-top: 8px; color: var(--dim); font-size: 12px; }
+  .skillCard summary { cursor: pointer; color: var(--text); }
+  .skillCard pre { white-space: pre-wrap; font: 11px/1.45 var(--mono); background: var(--logbg);
+                   border: 1px solid var(--border); border-radius: 8px; padding: 8px; margin-top: 6px; max-height: 220px; overflow: auto; }
+  .skillCard .row { margin-top: 10px; }
+  .skillCard button { padding: 6px 10px; font-size: 12px; border-radius: 8px; }
   .lanBox { margin: 14px 0 18px; padding: 12px 14px; border: 1px solid var(--border);
             border-radius: 12px; background: var(--panel); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .lanBox .lanMain { font-weight: 600; }
@@ -508,6 +526,7 @@
   <div id="chatList"></div>
   <div class="sect" style="margin-top:8px">Sistema</div>
   <div class="nav" data-p="status" onclick="go('status')"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M4 12h4l3-7 4 14 3-7h2"/></svg> Stato</div>
+  <div class="nav" data-p="skills" onclick="go('skills')"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12 4 7.5"/></svg> Skills</div>
   <div class="nav" data-p="config" onclick="go('config')"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg> Impostazioni</div>
   <div class="nav" data-p="logs" onclick="go('logs')"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 12h6M10 16h6"/></svg> Log</div>
   <div class="nav" data-p="info" onclick="go('info')"><svg class="uiIcon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg> Info</div>
@@ -622,6 +641,18 @@
     <h1 style="margin-top:28px">Setup doctor</h1>
     <div class="sub">Verifica dei requisiti, con il rimedio quando manca qualcosa.</div>
     <div class="cards" id="docCards"></div>
+  </div></div>
+
+  <!-- ============ SKILLS ============ -->
+  <div class="page" id="skillsPage"><div class="pad">
+    <h1>Skills</h1>
+    <div class="sub">Skill e comandi locali disponibili per la chat corrente o per una nuova chat.</div>
+    <div class="skillTop">
+      <input id="skillSearch" type="search" placeholder="Cerca skill o comando">
+      <button id="btnSkillReload"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M20 6v5h-5"/><path d="M20 11a8 8 0 1 0-2.3 5.7"/></svg> Ricarica</button>
+      <span class="sub" id="skillMsg"></span>
+    </div>
+    <div class="skillGrid" id="skillGrid"></div>
   </div></div>
 
   <!-- ============ CONFIG ============ -->
@@ -747,7 +778,61 @@ function navTo(page) {
   if (page === "home") { renderRecents(); $("#homeInp").focus(); }
   if (page === "logs") loadLogs();
   if (page === "config") loadConfig();
+  if (page === "skills") loadSkills();
   applyWorkVisibility();
+}
+
+/* ============ SKILLS picker locale ============ */
+let skillItems = [];
+let skillKey = "";
+
+function skillCwd() {
+  return cur()?.dirs?.[0] || homeDirs[0] || "";
+}
+
+async function loadSkills(force = false) {
+  const key = skillCwd();
+  if (skillItems.length && !force && skillKey === key) { renderSkills(); return; }
+  skillKey = key;
+  $("#skillMsg").textContent = "caricamento…";
+  try {
+    const j = await (await fetch("/api/skills?cwd=" + encodeURIComponent(key))).json();
+    skillItems = j.skills || [];
+    $("#skillMsg").textContent = `${skillItems.length} elementi`;
+  } catch (e) {
+    $("#skillMsg").textContent = "errore: " + e;
+  }
+  renderSkills();
+}
+
+function useSkill(item) {
+  const text = item.kind === "command"
+    ? `${item.name} `
+    : `Usa la skill "${item.name}" (${item.src}) per questa richiesta.\n\n`;
+  const target = cur() ? $("#inp") : $("#homeInp");
+  target.value = text + target.value;
+  go(cur() ? "chat" : "home");
+  target.focus();
+  target.setSelectionRange(target.value.length, target.value.length);
+}
+
+function renderSkills() {
+  const q = ($("#skillSearch")?.value || "").trim().toLowerCase();
+  const items = skillItems.filter(it => !q
+    || it.name.toLowerCase().includes(q)
+    || it.desc.toLowerCase().includes(q)
+    || it.src.toLowerCase().includes(q)
+    || it.kind.toLowerCase().includes(q));
+  $("#skillGrid").innerHTML = items.map((it, i) => `
+    <div class="skillCard">
+      <h3><span class="kind">${esc(it.kind)}</span><span>${esc(it.name)}</span><span class="src">${esc(it.src)}</span></h3>
+      <div class="desc">${esc(it.desc || "(nessuna descrizione)")}</div>
+      <div class="path">${esc(it.path || "")}</div>
+      ${it.excerpt ? `<details><summary>Anteprima</summary><pre>${esc(it.excerpt)}</pre></details>` : ""}
+      <div class="row"><button class="primary" data-skill="${i}">Usa in chat</button></div>
+    </div>`).join("") || `<div class="sub">Nessuna skill trovata.</div>`;
+  $("#skillGrid").querySelectorAll("button[data-skill]").forEach(btn =>
+    btn.onclick = () => useSkill(items[+btn.dataset.skill]));
 }
 
 /* ============ menu comandi slash (come Claude Code quando digiti /) ============ */
@@ -2146,6 +2231,8 @@ async function loadLogs() {
 }
 $("#logSel").onchange = loadLogs;
 setInterval(() => { if ($("#logAuto").checked) loadLogs(); }, 3000);
+$("#skillSearch").oninput = renderSkills;
+$("#btnSkillReload").onclick = () => loadSkills(true);
 
 /* ============ avvio ============ */
 attachSlash($("#homeInp"), () => homeDirs[0] || "");

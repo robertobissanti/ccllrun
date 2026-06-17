@@ -691,6 +691,19 @@ def _frontmatter_field(path, field, limit=2048):
     return ""
 
 
+def _read_excerpt(path, limit=900):
+    try:
+        text = Path(path).read_text(errors="replace")
+    except OSError:
+        return ""
+    text = text.strip()
+    if text.startswith("---"):
+        parts = text.split("---", 2)
+        if len(parts) == 3:
+            text = parts[2].strip()
+    return text[:limit]
+
+
 def _collect_commands(cwd):
     items, seen = [], set()
 
@@ -722,11 +735,55 @@ def _collect_commands(cwd):
     return items
 
 
+def _collect_skills(cwd):
+    items, seen = [], set()
+
+    def add(name, desc, src, path, kind):
+        key = (src, name, str(path))
+        if not name or key in seen:
+            return
+        seen.add(key)
+        items.append({"name": name, "desc": (desc or "")[:220], "src": src,
+                      "path": str(path), "kind": kind, "excerpt": _read_excerpt(path)})
+
+    roots = [(Path.home() / ".claude", "Claude user")]
+    if cwd and Path(cwd).is_dir():
+        roots.append((Path(cwd) / ".claude", "Claude progetto"))
+    roots.append((Path.home() / ".codex", "Codex user"))
+
+    for root, src in roots:
+        cmd_dir = root / "commands"
+        if cmd_dir.is_dir():
+            for f in sorted(cmd_dir.glob("*.md")):
+                add("/" + f.stem, _frontmatter_field(f, "description"), src, f, "command")
+        skills = root / "skills"
+        if skills.is_dir():
+            for sk in sorted(skills.glob("*/SKILL.md")) + sorted(skills.glob("*/*/SKILL.md")):
+                add(_frontmatter_field(sk, "name") or sk.parent.name,
+                    _frontmatter_field(sk, "description"), src, sk, "skill")
+
+    plugins = Path.home() / ".claude/plugins"
+    if plugins.is_dir():
+        for sk in sorted(plugins.glob("*/skills/*/SKILL.md")) + sorted(plugins.glob("*/*/skills/*/SKILL.md")):
+            add(_frontmatter_field(sk, "name") or sk.parent.name,
+                _frontmatter_field(sk, "description"), "Claude plugin", sk, "skill")
+
+    items.sort(key=lambda c: (c["kind"], c["src"], c["name"].lower()))
+    return items
+
+
 async def api_commands(request):
     cwd = os.path.expanduser(request.query.get("cwd", ""))
     loop = asyncio.get_event_loop()
     items = await loop.run_in_executor(None, _collect_commands, cwd)
     return web.json_response({"ok": True, "commands": items})
+
+
+async def api_skills(request):
+    cwd = os.path.expanduser(request.query.get("cwd", ""))
+    loop = asyncio.get_event_loop()
+    items = await loop.run_in_executor(None, _collect_skills, cwd)
+    return web.json_response({"ok": True, "skills": items})
 
 
 # -------------------------------------------------------------- config & log
@@ -893,6 +950,7 @@ def main():
     app.router.add_get("/api/perm/pending", api_perm_pending)
     app.router.add_post("/api/perm/reply", api_perm_reply)
     app.router.add_get("/api/commands", api_commands)
+    app.router.add_get("/api/skills", api_skills)
     app.router.add_get("/api/config", api_config_get)
     app.router.add_put("/api/config", api_config_put)
     app.router.add_get("/api/logs", api_logs)
