@@ -211,10 +211,43 @@ fi
 health() { curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$1/health" 2>/dev/null; }
 openai_health() { curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$1/v1/models" 2>/dev/null; }
 mkdir -p "$CC_DIR"
+mlx_dir_error() {
+  python3 - "$1" <<'PY'
+import json, sys
+from pathlib import Path
+
+p = Path(sys.argv[1]).expanduser()
+if not p.is_dir():
+    print("cartella non trovata")
+    raise SystemExit
+if not (p / "config.json").is_file():
+    print("config.json non trovato")
+    raise SystemExit
+parts = sorted(x.name for x in p.glob("*.part"))
+if parts:
+    print("download incompleto: " + ", ".join(parts[:3]))
+    raise SystemExit
+index = p / "model.safetensors.index.json"
+if index.is_file():
+    try:
+        data = json.loads(index.read_text())
+        expected = sorted(set((data.get("weight_map") or {}).values()))
+    except Exception as exc:
+        print(f"model.safetensors.index.json non leggibile: {exc}")
+        raise SystemExit
+    missing = [name for name in expected if not (p / name).is_file()]
+    if missing:
+        print("file safetensors mancanti: " + ", ".join(missing[:3]))
+        raise SystemExit
+elif not any(p.glob("*.safetensors")):
+    print("nessun file .safetensors trovato")
+PY
+}
 
 if [[ "$BACKEND" == "mlx-lm" ]]; then
-  if [[ -z "$BIG_MLX" || ! -d "$BIG_MLX" ]]; then
-    echo "[ccllrun] cartella MLX big non trovata: ${BIG_MLX:-'(vuota)'}" >&2
+  BIG_MLX_ISSUE="$(mlx_dir_error "${BIG_MLX:-}")"
+  if [[ -n "$BIG_MLX_ISSUE" ]]; then
+    echo "[ccllrun] cartella MLX big non valida: $BIG_MLX_ISSUE (${BIG_MLX:-vuota})" >&2
     exit 1
   fi
 elif [[ "$BACKEND" != "llama.cpp" ]]; then
@@ -241,8 +274,9 @@ if [[ "$BACKEND" == "mlx-lm" ]]; then
 
   # ---------- SMALL MLX ----------
   if [[ "$NO_SMALL" != "1" && -n "$SMALL_MLX" && "$SMALL_MLX" != "$BIG_MLX" && "$(openai_health "$SMALL_PORT")" != "200" ]]; then
-    if [[ ! -d "$SMALL_MLX" ]]; then
-      echo "[ccllrun] cartella MLX small non trovata: $SMALL_MLX" >&2
+    SMALL_MLX_ISSUE="$(mlx_dir_error "$SMALL_MLX")"
+    if [[ -n "$SMALL_MLX_ISSUE" ]]; then
+      echo "[ccllrun] cartella MLX small non valida: $SMALL_MLX_ISSUE ($SMALL_MLX)" >&2
       exit 1
     fi
     echo "[ccllrun] avvio $MODEL_SMALL MLX su :$SMALL_PORT..."

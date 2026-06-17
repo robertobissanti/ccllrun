@@ -230,7 +230,7 @@ def anthropic_to_openai(body):
         messages.append({"role": role, "content": content_text(msg.get("content"))})
 
     out = {
-        "model": body.get("model") or "local",
+        "model": "default_model" if UPSTREAM_API == "openai" else (body.get("model") or "local"),
         "messages": messages or [{"role": "user", "content": ""}],
         "stream": bool(body.get("stream")),
     }

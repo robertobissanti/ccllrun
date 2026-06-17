@@ -189,9 +189,9 @@ async def api_status(request):
         check(backend != "llama.cpp" or (small_gguf and Path(small_gguf).is_file() and str(small_gguf).lower().endswith(".gguf")), "GGUF small", small_gguf or "non configurato",
               "opzionale: small_gguf in config.json (o no_small: true)", warn=True, action={"kind": "config", "label": "Apri Impostazioni"}),
         check(backend != "mlx-lm" or looks_like_mlx_dir(big_mlx), "MLX big", big_mlx or "non configurato",
-              "imposta big_mlx alla cartella del modello MLX", action={"kind": "config", "label": "Apri Impostazioni"}),
+              mlx_dir_error(big_mlx) or "imposta big_mlx alla cartella del modello MLX", action={"kind": "config", "label": "Apri Impostazioni"}),
         check(backend != "mlx-lm" or not small_mlx or looks_like_mlx_dir(small_mlx), "MLX small", small_mlx or "non configurato",
-              "opzionale: small_mlx alla cartella del modello MLX", warn=True, action={"kind": "config", "label": "Apri Impostazioni"}),
+              mlx_dir_error(small_mlx) or "opzionale: small_mlx alla cartella del modello MLX", warn=True, action={"kind": "config", "label": "Apri Impostazioni"}),
         check(mmproj and Path(mmproj).is_file(), "mmproj (visione)", mmproj or "non trovato",
               "opzionale: scarica mmproj-*.gguf accanto al GGUF big", warn=True, action={"kind": "config", "label": "Apri Impostazioni"}),
         check(CONFIG_FILE.exists() and "_config_error" not in cfg, "config.json",
@@ -983,11 +983,32 @@ def file_format(path):
     return ""
 
 
-def looks_like_mlx_dir(path):
+def mlx_dir_error(path):
     p = Path(path)
     if not p.is_dir():
-        return False
-    return (p / "config.json").is_file() and any(p.glob("*.safetensors"))
+        return "cartella non trovata"
+    if not (p / "config.json").is_file():
+        return "config.json non trovato"
+    parts = sorted(x.name for x in p.glob("*.part"))
+    if parts:
+        return "download incompleto: " + ", ".join(parts[:3])
+    index = p / "model.safetensors.index.json"
+    if index.is_file():
+        try:
+            data = json.loads(index.read_text())
+            expected = sorted(set((data.get("weight_map") or {}).values()))
+        except Exception as exc:
+            return f"model.safetensors.index.json non leggibile: {exc}"
+        missing = [name for name in expected if not (p / name).is_file()]
+        if missing:
+            return "file safetensors mancanti: " + ", ".join(missing[:3])
+    elif not any(p.glob("*.safetensors")):
+        return "nessun file .safetensors trovato"
+    return ""
+
+
+def looks_like_mlx_dir(path):
+    return not mlx_dir_error(path)
 
 
 def validate_model_config(cfg):
@@ -1176,10 +1197,11 @@ async def api_models_apply(request):
         candidate = Path(path)
         if candidate.is_file():
             candidate = candidate.parent
-        if not looks_like_mlx_dir(candidate):
+        issue = mlx_dir_error(candidate)
+        if issue:
             return web.json_response({
                 "ok": False,
-                "error": "scegli la cartella del modello MLX: deve contenere config.json e file .safetensors"
+                "error": "cartella modello MLX non valida: " + issue
             }, status=400)
         path = str(candidate)
     cfg = {}
