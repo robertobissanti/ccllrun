@@ -985,17 +985,20 @@ def looks_like_mlx_dir(path):
 
 def validate_model_config(cfg):
     errors = []
-    for key in ("big_gguf", "small_gguf"):
-        value = str(cfg.get(key) or "").strip()
-        if value and not value.lower().endswith(".gguf"):
-            errors.append(f"{key} deve puntare a un file .gguf")
-    for key in ("big_mlx", "small_mlx"):
-        value = str(cfg.get(key) or "").strip()
-        if value and value.lower().endswith((".gguf", ".safetensors")):
-            errors.append(f"{key} deve puntare alla cartella del modello MLX, non a un singolo file")
     backend = str(cfg.get("backend") or "llama.cpp")
     if backend not in {"llama.cpp", "mlx-lm"}:
         errors.append("backend deve essere llama.cpp oppure mlx-lm")
+        return errors
+    if backend == "llama.cpp":
+        for key in ("big_gguf", "small_gguf"):
+            value = str(cfg.get(key) or "").strip()
+            if value and not value.lower().endswith(".gguf"):
+                errors.append(f"{key} deve puntare a un file .gguf")
+    if backend == "mlx-lm":
+        for key in ("big_mlx", "small_mlx"):
+            value = str(cfg.get(key) or "").strip()
+            if value and value.lower().endswith((".gguf", ".safetensors")):
+                errors.append(f"{key} deve puntare alla cartella del modello MLX, non a un singolo file")
     return errors
 
 

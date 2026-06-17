@@ -2520,16 +2520,21 @@ function collectCfgForm() {
 
 function validateCfgObject(cfg) {
   const errors = [];
+  const backend = String(cfg.backend || "llama.cpp");
   const bigGguf = String(cfg.big_gguf || "").trim();
   const smallGguf = String(cfg.small_gguf || "").trim();
   const bigMlx = String(cfg.big_mlx || "").trim();
   const smallMlx = String(cfg.small_mlx || "").trim();
   const badGguf = p => p && !p.toLowerCase().endsWith(".gguf");
   const badMlx = p => p && /\.(gguf|safetensors)$/i.test(p);
-  if (badGguf(bigGguf)) errors.push(["big_gguf", "GGUF big deve puntare a un file .gguf. I file MLX/safetensors non sono validi per llama.cpp."]);
-  if (badGguf(smallGguf)) errors.push(["small_gguf", "GGUF small deve puntare a un file .gguf oppure restare vuoto."]);
-  if (badMlx(bigMlx)) errors.push(["big_mlx", "MLX big deve puntare alla cartella del modello, non a un singolo file."]);
-  if (badMlx(smallMlx)) errors.push(["small_mlx", "MLX small deve puntare alla cartella del modello, non a un singolo file."]);
+  if (backend === "llama.cpp") {
+    if (badGguf(bigGguf)) errors.push(["big_gguf", "GGUF big deve puntare a un file .gguf. I file MLX/safetensors non sono validi per llama.cpp."]);
+    if (badGguf(smallGguf)) errors.push(["small_gguf", "GGUF small deve puntare a un file .gguf oppure restare vuoto."]);
+  }
+  if (backend === "mlx-lm") {
+    if (badMlx(bigMlx)) errors.push(["big_mlx", "MLX big deve puntare alla cartella del modello, non a un singolo file."]);
+    if (badMlx(smallMlx)) errors.push(["small_mlx", "MLX small deve puntare alla cartella del modello, non a un singolo file."]);
+  }
   return errors;
 }
 
