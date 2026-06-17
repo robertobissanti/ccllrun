@@ -259,11 +259,17 @@
   #engineBadge { font-size: 11.5px; color: var(--dim); display: inline-flex; align-items: center; gap: 6px; }
   #recents { width: min(720px, 92%); margin-top: 30px; }
   #recents h2 { font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 8px; }
+  #recentTools { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  #recentTools h2 { margin: 0; }
+  #recentSearch { margin-left: auto; width: 220px; max-width: 46%; background: var(--panel); color: var(--text);
+                  border: 1px solid var(--border); border-radius: 9px; padding: 6px 9px; font: 12px inherit; outline: none; }
+  #recentSearch:focus { border-color: var(--accent); }
   .ritem { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 12px; cursor: pointer;
            border: 1px solid transparent; }
   .ritem:hover { background: var(--panel); border-color: var(--border); }
   .ritem .ic { color: var(--dim); line-height: 0; display: inline-flex; }
   .ritem .name { font-weight: 500; }
+  .ritem .pin { color: var(--warn); font-size: 12px; margin-right: -4px; }
   .ritem .path { color: var(--dim); font-size: 11.5px; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ritem .when { margin-left: auto; color: var(--dim); font-size: 11.5px; flex-shrink: 0; }
 
@@ -288,6 +294,10 @@
   .liveThink::before { content: "ragionamento"; display: block; font-size: 10px; text-transform: uppercase;
                        letter-spacing: .6px; opacity: .7; margin-bottom: 2px; }
   .liveText { white-space: pre-wrap; word-break: break-word; }
+  details.thinkBlock { color: var(--dim); font-size: 12px; border-left: 2px solid var(--border);
+                       padding-left: 10px; white-space: pre-wrap; }
+  details.thinkBlock summary { cursor: pointer; color: var(--text); font-weight: 600; margin-bottom: 4px; }
+  details.thinkBlock .thinkText { white-space: pre-wrap; word-break: break-word; }
   .liveCaret::after { content: "▍"; color: var(--accent); animation: blink 1s steps(1) infinite; }
   @keyframes blink { 50% { opacity: 0; } }
   /* card di approvazione permessi (richieste interattive dal permtool) */
@@ -388,6 +398,7 @@
                      color: inherit; padding: 0 18px 0 0; font: 12px var(--mono); outline: none; cursor: pointer;
                      min-width: 0; max-width: 210px; }
   .permChip .chev { width: 14px; height: 14px; margin-left: -18px; pointer-events: none; stroke-width: 2; }
+  .planChip.on { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
   .launchBtn { display: inline-flex; align-items: center; gap: 8px; border-radius: 20px;
                padding: 6px 13px; color: var(--text); background: var(--panel2);
                border-color: var(--border); font-size: 13px; font-weight: 600; }
@@ -412,6 +423,13 @@
   .card h3 { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
   .card .detail { color: var(--dim); font-size: 12px; margin-top: 6px; word-break: break-all; font-family: var(--mono); }
   .card .hint { color: var(--warn); font-size: 12px; margin-top: 8px; }
+  .card .docActions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .card .docActions button { padding: 5px 9px; font-size: 12px; border-radius: 8px; }
+  .lanBox { margin: 14px 0 18px; padding: 12px 14px; border: 1px solid var(--border);
+            border-radius: 12px; background: var(--panel); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .lanBox .lanMain { font-weight: 600; }
+  .lanBox .lanDetail { color: var(--dim); font: 12px var(--mono); }
+  .lanBox .warn { color: var(--warn); font-size: 12px; flex-basis: 100%; }
   .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
   .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.err { background: var(--err); }
   .srv { display: flex; align-items: baseline; justify-content: space-between; margin-top: 8px; }
@@ -515,7 +533,10 @@
       </div>
     </div>
     <div id="recents">
-      <h2>Recenti</h2>
+      <div id="recentTools">
+        <h2>Recenti</h2>
+        <input id="recentSearch" type="search" placeholder="Cerca chat">
+      </div>
       <div id="recentList"></div>
     </div>
   </div>
@@ -559,6 +580,11 @@
         </button>
       </div>
       <div class="composerBar">
+        <label class="permChip planChip" id="planChip" title="Crea o aggiorna un piano Markdown nel progetto senza implementare modifiche.">
+          <svg class="uiIcon" viewBox="0 0 24 24"><path d="M7 3h10l3 3v15H7z"/><path d="M17 3v4h4M10 11h7M10 15h7M10 19h4"/></svg>
+          <span>Plan mode</span>
+          <span class="sw" style="margin-left:2px"><input type="checkbox" id="planMode"><span class="tk"></span></span>
+        </label>
         <label class="permChip" title="In headless non esiste il prompt interattivo di approvazione: i comandi non coperti dalla modalità vengono negati. Per compilare/eseguire serve 'tutto consentito'.">
           <svg class="uiIcon" viewBox="0 0 24 24"><path d="M12 3 20 7v5c0 5-3.4 8.2-8 9-4.6-.8-8-4-8-9V7z"/><path d="M9 12l2 2 4-5"/></svg>
           <select id="permSel">
@@ -585,6 +611,12 @@
       <button class="primary" id="btnToggle">▶ Avvia server</button>
       <button id="btnRestart" title="Ferma e riavvia tutto lo stack"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M20 6v5h-5"/><path d="M20 11a8 8 0 1 0-2.3 5.7"/></svg> Riavvia</button>
       <span id="startMsg"></span>
+    </div>
+    <div class="lanBox">
+      <span class="lanMain">Accesso LAN</span>
+      <label class="sw"><input type="checkbox" id="lanToggle"><span class="tk"></span></label>
+      <span class="lanDetail" id="lanDetail">solo localhost</span>
+      <span class="warn" id="lanWarn" style="display:none">Chiunque sulla rete locale puo usare chat e agent. Attivalo solo su reti fidate e riapri Studio per applicare.</span>
     </div>
     <div class="cards" id="srvCards"></div>
     <h1 style="margin-top:28px">Setup doctor</h1>
@@ -682,8 +714,13 @@ const markReady = fetch("/mark.svg").then(r => r.text()).then(svg => {
 /* sessione = { id, title, dirs: [path…], msgs: [{role,content}], ts } — la cartella di
    progetto vive QUI, dentro la singola chat, non come impostazione globale. */
 let sessions = JSON.parse(localStorage.getItem("sessions") || "[]");
+sessions.forEach(s => {
+  if (s.pinned === undefined) s.pinned = false;
+  if (!s.ts) s.ts = Date.now();
+});
 let current = null;          // id sessione aperta
 let homeDirs = [];           // cartelle scelte nel composer della home
+const orderedSessions = () => [...sessions].sort((a, b) => (b.pinned - a.pinned) || (b.ts - a.ts));
 const save = () => localStorage.setItem("sessions", JSON.stringify(sessions));
 const cur = () => sessions.find(s => s.id === current);
 
@@ -822,26 +859,47 @@ function startChat() {
 function renderRecents() {
   const ago = ts => { const m = (Date.now() - ts) / 60000;
     return m < 60 ? Math.max(1, m | 0) + " min fa" : m < 1440 ? (m / 60 | 0) + " h fa" : (m / 1440 | 0) + " g fa"; };
-  $("#recentList").innerHTML = sessions.slice(0, 8).map(s => `
+  const q = ($("#recentSearch")?.value || "").trim().toLowerCase();
+  const items = orderedSessions().filter(s => !q || s.title.toLowerCase().includes(q)
+    || (s.dirs || []).join(" ").toLowerCase().includes(q)
+    || (s.msgs || []).some(m => String(m.content || "").toLowerCase().includes(q))).slice(0, 12);
+  $("#recentList").innerHTML = items.map(s => `
     <div class="ritem" data-id="${s.id}">
       <span class="ic">${s.dirs.length ? ICON_FOLDER : ICON_CHAT}</span>
       <span><div class="name">${esc(s.title)}</div>
         ${s.dirs.length ? `<div class="path">${esc(s.dirs.join("  ·  "))}</div>` : ""}</span>
+      ${s.pinned ? `<span class="pin" title="Fissata">●</span>` : ""}
       <span class="when">${ago(s.ts)}</span>
-    </div>`).join("") || `<div class="sub">Nessuna chat ancora — inizia qui sopra.</div>`;
+    </div>`).join("") || `<div class="sub">${q ? "Nessuna chat trovata." : "Nessuna chat ancora — inizia qui sopra."}</div>`;
   $("#recentList").querySelectorAll(".ritem").forEach(r => r.onclick = () => openChat(r.dataset.id));
 }
+$("#recentSearch").oninput = renderRecents;
 
 /* ============ sidebar: elenco chat ============ */
 function renderChatList() {
-  $("#chatList").innerHTML = sessions.map(s => `
+  $("#chatList").innerHTML = orderedSessions().map(s => `
     <div class="citem ${s.id === current ? "on" : ""}" data-id="${s.id}">
-      <span class="t">${esc(s.title)}</span><span class="x" data-id="${s.id}">✕</span>
+      <span class="t">${s.pinned ? "● " : ""}${esc(s.title)}</span>
+      <span class="x" data-act="pin" title="${s.pinned ? "Sblocca" : "Fissa"}">${s.pinned ? "◇" : "◆"}</span>
+      <span class="x" data-act="rename" title="Rinomina">✎</span>
+      <span class="x" data-act="delete" title="Elimina">✕</span>
     </div>`).join("");
   $("#chatList").querySelectorAll(".citem").forEach(c => c.onclick = e => {
     if (e.target.classList.contains("x")) {
+      const s = sessions.find(x => x.id === c.dataset.id);
+      const act = e.target.dataset.act;
+      if (act === "pin" && s) {
+        s.pinned = !s.pinned; s.ts = Date.now(); save(); renderChatList(); renderRecents();
+        return;
+      }
+      if (act === "rename" && s) {
+        const next = prompt("Nome chat:", s.title);
+        if (next && next.trim()) { s.title = next.trim().slice(0, 80); save(); if (current === s.id) $("#chatTitle").textContent = s.title; renderChatList(); renderRecents(); }
+        return;
+      }
       sessions = sessions.filter(s => s.id !== c.dataset.id); save();
       if (current === c.dataset.id) go("home"); else renderChatList();
+      renderRecents();
       return;
     }
     openChat(c.dataset.id);
@@ -858,6 +916,8 @@ function openChat(id) {
   $("#chatTitle").textContent = s.title;
   renderChatDirs(); renderChatList();
   $("#permSel").value = s.permMode || "acceptEdits";
+  $("#planMode").checked = !!s.planMode;
+  $("#planChip").classList.toggle("on", !!s.planMode);
   $("#msgs").innerHTML = "";
   s.msgs.forEach(m => {
     if (m.role !== "user" && m.role !== "assistant") return;
@@ -887,6 +947,17 @@ $("#permSel").onchange = () => {
   $("#stats").textContent = s.permMode === "bypassPermissions"
     ? "permessi: tutto consentito — Claude può eseguire qualsiasi comando in questa chat"
     : "permessi aggiornati per i prossimi turni";
+};
+$("#planMode").onchange = () => {
+  const s = cur(); if (!s) return;
+  s.planMode = $("#planMode").checked;
+  if (s.planMode) s.permMode = "plan";
+  $("#permSel").value = s.permMode || "acceptEdits";
+  $("#planChip").classList.toggle("on", s.planMode);
+  save();
+  $("#stats").textContent = s.planMode
+    ? "Plan mode attivo — il prossimo turno produrrà/aggiornerà un piano Markdown senza implementare"
+    : "Plan mode disattivato";
 };
 /* Token live: preferenza UI globale (non per-chat). Vale dal turno successivo. */
 const LIVE_TOK_KEY = "ccllrun.liveTokens";
@@ -1023,6 +1094,13 @@ function bodyEl(txt) {
   return el;
 }
 
+function thinkEl(txt) {
+  const el = document.createElement("details");
+  el.className = "thinkBlock";
+  el.innerHTML = `<summary>Ragionamento</summary><div class="thinkText">${esc(txt)}</div>`;
+  return el;
+}
+
 function createMsg(role) {
   const div = document.createElement("div");
   div.className = "msg " + (role === "user" ? "user" : "bot");
@@ -1061,6 +1139,8 @@ function renderInto(content, m) {
         const el = document.createElement("div");
         el.className = "tools"; el.textContent = b.v;
         content.appendChild(el);
+      } else if (b.t === "think") {
+        content.appendChild(thinkEl(b.v));
       } else {
         content.appendChild(m.role === "user" ? Object.assign(document.createElement("div"), { className: "body", textContent: b.v }) : bodyEl(b.v));
       }
@@ -1531,7 +1611,7 @@ $("#btnStop").onclick = () => { queue.length = 0; aborter?.abort(); };  // ferma
 
 function sendMessage(forcedText) {
   const s = cur(); if (!s) return;
-  const text = forcedText || $("#inp").value.trim();
+  let text = forcedText || $("#inp").value.trim();
   if (!text) return;
   if (text === "/clear") {            // gestito in locale: nuova sessione Claude Code
     s.claudeSid = null; s.msgs = []; save();
@@ -1541,8 +1621,12 @@ function sendMessage(forcedText) {
   }
   if (!lastStatus?.servers?.proxy?.up) { alert("Lo stack è fermo: avvialo da Sistema → Stato (la chat è Claude Code sul modello locale)."); return; }
   if (!forcedText) $("#inp").value = "";
-  addMsg("user").textContent = text;
-  s.msgs.push({ role: "user", content: text }); s.ts = Date.now(); save();
+  const displayText = text;
+  if (s.planMode) {
+    text = `PLAN MODE: crea o aggiorna un piano Markdown nel workspace, senza implementare modifiche al codice e senza eseguire azioni distruttive. Scrivi un file plan.md o <topic>-plan.md se il progetto ne beneficia. Includi obiettivo, assunzioni, deliverable, milestone, task, rischi, validazione e prossime azioni.\n\nRichiesta utente:\n${text}`;
+  }
+  addMsg("user").textContent = displayText;
+  s.msgs.push({ role: "user", content: displayText }); s.ts = Date.now(); save();
   $("#msgs").scrollTop = $("#msgs").scrollHeight;
   queue.push({ s, text });          // la coda ricorda a quale chat appartiene il messaggio
   if (!streaming) processQueue();
@@ -1616,12 +1700,13 @@ async function runTurn(s, text) {
   // --- token live (--include-partial-messages): accumulo dei delta in due
   // elementi "vivi" (ragionamento + testo). Il blocco assistant finale rimpiazza
   // il testo vivo con la versione renderizzata; il ragionamento resta attenuato.
-  let liveThinkEl = null, liveTextEl = null;
+  let liveThinkEl = null, liveTextEl = null, liveThinkText = "", liveThinkSaved = false;
   const appendDelta = (kind, txt) => {
     if (pending) { pending.remove(); pending = null; }
     if (kind === "thinking") {
       if (!liveThinkEl) { liveThinkEl = document.createElement("div"); liveThinkEl.className = "liveThink"; content.appendChild(liveThinkEl); }
       liveThinkEl.textContent += txt;
+      liveThinkText += txt;
     } else {
       if (!liveTextEl) { liveTextEl = document.createElement("div"); liveTextEl.className = "liveText liveCaret"; content.appendChild(liveTextEl); }
       liveTextEl.textContent += txt;
@@ -1632,6 +1717,10 @@ async function runTurn(s, text) {
   };
   const finalizeLiveThink = () => {
     if (liveThinkEl) liveThinkEl.classList.remove("liveCaret");
+    if (liveThinkText.trim() && !liveThinkSaved) {
+      liveThinkSaved = true;
+      transcript.push({ t: "think", v: liveThinkText.trim() });
+    }
   };
   const here = () => cur() === s;     // la chat di questo turno è quella visibile?
   // polling delle richieste di permesso in sospeso (permtool → /api/perm/ask)
@@ -1659,7 +1748,7 @@ async function runTurn(s, text) {
       signal: aborter.signal,
       body: JSON.stringify({ prompt: text, cwd: s.dirs[0] || null,
                              add_dirs: s.dirs.slice(1), session_id: s.claudeSid || null,
-                             permission_mode: s.permMode || "acceptEdits",
+                             permission_mode: s.planMode ? "plan" : (s.permMode || "acceptEdits"),
                              tool_search: s.toolSearch, partial: liveOn() }) });
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "HTTP " + r.status);
     const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = "";
@@ -1752,6 +1841,7 @@ let lastStatus = null;
 async function refreshStatus() {
   try { lastStatus = await (await fetch("/api/status")).json(); } catch (e) { return; }
   const { servers: s, doctor, config } = lastStatus;
+  renderLanBox();
   $("#engineDot").className = "dot " + (s.big.up ? "ok" : "err");
   $("#engineTxt").textContent = s.big.up
     ? `${config.model_big} · ctx ${s.big.ctx ? Math.round(s.big.ctx / 1024) + "k" : "?"}`
@@ -1771,13 +1861,57 @@ async function refreshStatus() {
         <span class="badge ${s.proxy.up ? "up" : "down"}" style="margin-left:auto">${s.proxy.up ? "attivo" : "fermo"}</span></h3>
       <div class="srv"><b>ANTHROPIC_BASE_URL</b><span class="badge">:${s.proxy.port}</span></div>
       <div class="detail">${s.proxy.pid ? "pid " + s.proxy.pid : ""}</div></div>`;
-  $("#docCards").innerHTML = doctor.map(d => `
+  $("#docCards").innerHTML = doctor.map((d, i) => `
     <div class="card"><h3><span class="dot ${d.ok ? "ok" : d.warn ? "warn" : "err"}"></span> ${esc(d.label)}</h3>
       <div class="detail">${esc(d.detail)}</div>
-      ${d.hint ? `<div class="hint">→ ${esc(d.hint)}</div>` : ""}</div>`).join("");
+      ${d.hint ? `<div class="hint">→ ${esc(d.hint)}</div>` : ""}
+      ${!d.ok && d.action?.kind ? `<div class="docActions"><button data-doc="${i}">${esc(d.action.label || "Rimedio")}</button></div>` : ""}</div>`).join("");
+  $("#docCards").querySelectorAll("button[data-doc]").forEach(btn => {
+    btn.onclick = async () => {
+      const d = doctor[+btn.dataset.doc], a = d.action || {};
+      if (a.kind === "copy") {
+        await copyToClipboard(a.value || d.hint || "");
+        btn.textContent = "copiato";
+      } else if (a.kind === "config") {
+        go("config");
+      } else if (a.kind === "start") {
+        $("#startMsg").textContent = "avvio in corso…";
+        srvRun("avvio…", ["start"]);
+      }
+    };
+  });
   renderSrvButtons();
 }
 refreshStatus(); setInterval(refreshStatus, 4000);
+
+async function writeConfigPatch(patch) {
+  const j = await (await fetch("/api/config")).json();
+  let cfg = {};
+  try { cfg = JSON.parse(j.text || "{}"); } catch {}
+  Object.assign(cfg, patch);
+  const r = await fetch("/api/config", { method: "PUT", headers: HDRS, body: JSON.stringify(cfg, null, 2) + "\n" });
+  return (await r.json()).ok;
+}
+
+function renderLanBox() {
+  const st = lastStatus?.studio || {};
+  const cfg = lastStatus?.config || {};
+  const wanted = !!cfg.studio_lan_enabled;
+  const active = !!st.lan_enabled;
+  $("#lanToggle").checked = wanted;
+  const url = active && st.lan_address ? `http://${st.lan_address}:${st.port}` : `http://127.0.0.1:${st.port}`;
+  $("#lanDetail").textContent = active ? `attivo: ${url}` : wanted ? `salvato, riapri Studio per attivare` : "solo localhost";
+  $("#lanWarn").style.display = wanted ? "" : "none";
+}
+
+$("#lanToggle").onchange = async () => {
+  const wanted = $("#lanToggle").checked;
+  const ok = await writeConfigPatch({ studio_lan_enabled: wanted });
+  $("#startMsg").textContent = ok
+    ? (wanted ? "LAN salvata: chiudi e riapri Studio per esporre la dashboard sulla rete locale." : "LAN disattivata: chiudi e riapri Studio per tornare a localhost.")
+    : "errore nel salvataggio della preferenza LAN";
+  await refreshStatus();
+};
 
 /* Un solo toggle Avvia/Ferma (autoescludente, bloccato mentre l'azione è in
    corso) + Riavvia che fa stop e start in sequenza. Lo stato vero arriva da
@@ -1872,6 +2006,8 @@ const CFG_SCHEMA = [
     d: "renderizza le risposte come markdown (titoli, liste, codice, tabelle); spento = testo grezzo", def: true },
   { k: "studio_autostart", t: "switch", l: "Avvio automatico stack",
     d: "all'apertura di Studio avvia big+small+proxy come la CLI", def: true },
+  { k: "studio_lan_enabled", t: "switch", l: "Accesso LAN",
+    d: "alla prossima apertura di Studio espone la dashboard sulla rete locale; usare solo su reti fidate", def: false },
 ];
 
 let cfgJsonMode = false;

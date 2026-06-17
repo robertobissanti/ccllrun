@@ -26,6 +26,7 @@ import os
 import pty
 import shutil
 import signal
+import socket
 import struct
 import sys
 import termios
@@ -61,7 +62,6 @@ CLAUDE_BIN = _find_bin("CLAUDE_BIN", "claude",
                        [str(Path.home() / ".local/bin/claude"), "/opt/homebrew/bin/claude",
                         str(Path.home() / ".claude/local/claude")])
 STUDIO_PORT = int(os.environ.get("STUDIO_PORT", "8770"))
-STUDIO_HOST = os.environ.get("STUDIO_HOST", "127.0.0.1")
 STUDIO_PARENT_PID = int(os.environ.get("STUDIO_PARENT_PID", "0") or 0)
 
 DEFAULTS = {
@@ -71,6 +71,7 @@ DEFAULTS = {
     "small_gguf": str(Path.home() / ".lmstudio/models/ghost-actual/Qwen3.6-9B-Heretic-History-Q4_K_M-GGUF/history-9b-Q4_K_M.gguf"),
     "studio_markdown": True,
     "studio_autostart": True,
+    "studio_lan_enabled": False,
     "cc_tool_search": False,
 }
 
@@ -93,6 +94,25 @@ def load_config():
     except Exception as exc:
         cfg["_config_error"] = str(exc)
     return cfg
+
+
+def studio_bind_host():
+    env_host = os.environ.get("STUDIO_HOST")
+    if env_host:
+        return env_host
+    return "0.0.0.0" if load_config().get("studio_lan_enabled") else "127.0.0.1"
+
+
+STUDIO_HOST = studio_bind_host()
+
+
+def lan_address():
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except OSError:
+        return ""
 
 
 async def http_json(url, timeout=2):
@@ -126,9 +146,9 @@ async def api_status(request):
         mmproj = found[0] if found else ""
 
     # setup doctor — ogni check: ok / warn / fail + hint per sistemarlo
-    def check(ok, label, detail, hint="", warn=False):
+    def check(ok, label, detail, hint="", warn=False, action=None):
         return {"ok": bool(ok), "warn": bool(warn and not ok), "label": label,
-                "detail": detail, "hint": "" if ok else hint}
+                "detail": detail, "hint": "" if ok else hint, "action": action or {}}
 
     settings_ok = False
     try:
@@ -138,26 +158,27 @@ async def api_status(request):
 
     doctor = [
         check(shutil.which("llama-server"), "llama-server", shutil.which("llama-server") or "non trovato nel PATH",
-              "brew install llama.cpp"),
+              "brew install llama.cpp", action={"kind": "copy", "label": "Copia install", "value": "brew install llama.cpp"}),
         check(shutil.which("claude"), "Claude Code", shutil.which("claude") or "non trovato nel PATH",
-              "npm install -g @anthropic-ai/claude-code"),
+              "npm install -g @anthropic-ai/claude-code", action={"kind": "copy", "label": "Copia install", "value": "npm install -g @anthropic-ai/claude-code"}),
         check((CC_DIR / "proxy.py").exists(), "proxy.py", str(CC_DIR / "proxy.py"),
-              "copia proxy.py in ~/.ccllrun/"),
+              "copia proxy.py in ~/.ccllrun/", action={"kind": "start", "label": "Avvia stack"}),
         check((CC_DIR / "venv/bin/python").exists(), "venv Python", str(CC_DIR / "venv"),
-              "creato automaticamente al primo `ccllrun`", warn=True),
+              "creato automaticamente al primo `ccllrun`", warn=True, action={"kind": "start", "label": "Avvia stack"}),
         check(Path(CCLLRUN_BIN).is_file(), "script ccllrun", CCLLRUN_BIN,
               "imposta CCLLRUN_BIN o reinstalla lo script"),
         check(big_gguf and Path(big_gguf).is_file(), "GGUF big", big_gguf or "non configurato",
-              "imposta big_gguf in config.json"),
+              "imposta big_gguf in config.json", action={"kind": "config", "label": "Apri Impostazioni"}),
         check(small_gguf and Path(small_gguf).is_file(), "GGUF small", small_gguf or "non configurato",
-              "opzionale: small_gguf in config.json (o no_small: true)", warn=True),
+              "opzionale: small_gguf in config.json (o no_small: true)", warn=True, action={"kind": "config", "label": "Apri Impostazioni"}),
         check(mmproj and Path(mmproj).is_file(), "mmproj (visione)", mmproj or "non trovato",
-              "opzionale: scarica mmproj-*.gguf accanto al GGUF big", warn=True),
+              "opzionale: scarica mmproj-*.gguf accanto al GGUF big", warn=True, action={"kind": "config", "label": "Apri Impostazioni"}),
         check(CONFIG_FILE.exists() and "_config_error" not in cfg, "config.json",
               cfg.get("_config_error") or str(CONFIG_FILE),
-              "crea ~/.ccllrun/config.json (vedi config.example.json)", warn=not CONFIG_FILE.exists()),
+              "crea ~/.ccllrun/config.json (vedi config.example.json)", warn=not CONFIG_FILE.exists(), action={"kind": "config", "label": "Apri Impostazioni"}),
         check(settings_ok, "settings Claude Code", "CLAUDE_CODE_ATTRIBUTION_HEADER",
-              'aggiungi {"env":{"CLAUDE_CODE_ATTRIBUTION_HEADER":"0"}} in ~/.claude/settings.json', warn=True),
+              'aggiungi {"env":{"CLAUDE_CODE_ATTRIBUTION_HEADER":"0"}} in ~/.claude/settings.json', warn=True,
+              action={"kind": "copy", "label": "Copia JSON", "value": '{"env":{"CLAUDE_CODE_ATTRIBUTION_HEADER":"0"}}'}),
     ]
 
     big_port, small_port, proxy_port = (int(cfg.get(k, DEFAULTS[k])) for k in ("big_port", "small_port", "proxy_port"))
@@ -179,6 +200,8 @@ async def api_status(request):
     }
     return web.json_response({"doctor": doctor, "servers": servers, "config": cfg,
                               "studio": {"host": STUDIO_HOST, "port": STUDIO_PORT,
+                                         "lan_enabled": STUDIO_HOST == "0.0.0.0",
+                                         "lan_address": lan_address(),
                                          "action": action_snapshot()}})
 
 
