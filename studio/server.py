@@ -26,6 +26,7 @@ from html.parser import HTMLParser
 import json
 import os
 import pty
+import re
 import shutil
 import signal
 import socket
@@ -79,6 +80,8 @@ DEFAULTS = {
 }
 
 LOGS = {"big": "llama-big.log", "small": "llama-small.log", "proxy": "proxy.log"}
+DOWNLOADS = {}
+DOWNLOAD_SEQ = 0
 
 
 def aug_env():
@@ -932,6 +935,127 @@ async def api_research_fetch(request):
                               "text": text[:12000], "chars": len(text)})
 
 
+# -------------------------------------------------------- Hugging Face models
+def safe_repo_id(repo):
+    if not re.match(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", repo or ""):
+        raise ValueError("repo non valido")
+    return repo
+
+
+def model_dest(repo, filename):
+    rel = Path(filename).name
+    return Path.home() / ".lmstudio" / "models" / repo / rel
+
+
+async def api_models_search(request):
+    q = (request.query.get("q") or "GGUF").strip()
+    limit = max(1, min(30, int(request.query.get("limit", "12"))))
+    url = f"https://huggingface.co/api/models?search={quote_plus(q + ' GGUF')}&limit={limit}&sort=downloads&direction=-1"
+    try:
+        async with ClientSession(timeout=ClientTimeout(total=20)) as s:
+            async with s.get(url, headers={"User-Agent": "ccllrun-Studio/0.1"}) as r:
+                data = await r.json(content_type=None)
+    except Exception as exc:
+        return web.json_response({"ok": False, "error": f"ricerca modelli non riuscita: {exc}"}, status=502)
+    out = []
+    for m in data if isinstance(data, list) else []:
+        out.append({"id": m.get("id") or m.get("modelId"), "downloads": m.get("downloads", 0),
+                    "likes": m.get("likes", 0), "tags": m.get("tags", [])[:12],
+                    "updatedAt": m.get("lastModified") or m.get("createdAt") or ""})
+    return web.json_response({"ok": True, "models": [x for x in out if x["id"]]})
+
+
+async def api_models_files(request):
+    repo = safe_repo_id(request.query.get("repo") or "")
+    url = f"https://huggingface.co/api/models/{repo}/tree/main?recursive=1"
+    try:
+        async with ClientSession(timeout=ClientTimeout(total=25)) as s:
+            async with s.get(url, headers={"User-Agent": "ccllrun-Studio/0.1"}) as r:
+                if r.status != 200:
+                    return web.json_response({"ok": False, "error": f"Hugging Face HTTP {r.status}"}, status=502)
+                data = await r.json(content_type=None)
+    except Exception as exc:
+        return web.json_response({"ok": False, "error": f"lista file non riuscita: {exc}"}, status=502)
+    files = []
+    for f in data if isinstance(data, list) else []:
+        path = f.get("path") or ""
+        if path.lower().endswith(".gguf"):
+            files.append({"path": path, "size": f.get("size") or 0,
+                          "downloaded": model_dest(repo, path).is_file(),
+                          "local": str(model_dest(repo, path))})
+    files.sort(key=lambda x: (("mmproj" not in x["path"].lower()), x["path"].lower()))
+    return web.json_response({"ok": True, "repo": repo, "files": files})
+
+
+async def download_model_job(job_id, repo, file_path):
+    job = DOWNLOADS[job_id]
+    dest = model_dest(repo, file_path)
+    url = f"https://huggingface.co/{repo}/resolve/main/{quote_plus(file_path, safe='/')}?download=true"
+    tmp = dest.with_suffix(dest.suffix + ".part")
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        async with ClientSession(timeout=ClientTimeout(total=None, sock_connect=20)) as s:
+            async with s.get(url, headers={"User-Agent": "ccllrun-Studio/0.1"}) as r:
+                if r.status != 200:
+                    raise RuntimeError(f"Hugging Face HTTP {r.status}")
+                total = int(r.headers.get("Content-Length") or 0)
+                job.update({"status": "running", "total": total, "downloaded": 0, "path": str(dest)})
+                with open(tmp, "wb") as f:
+                    async for chunk in r.content.iter_chunked(1024 * 512):
+                        if job.get("cancel"):
+                            raise RuntimeError("download annullato")
+                        f.write(chunk)
+                        job["downloaded"] += len(chunk)
+        tmp.replace(dest)
+        job.update({"status": "done", "path": str(dest), "error": ""})
+    except Exception as exc:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        job.update({"status": "error", "error": str(exc)})
+
+
+async def api_models_download(request):
+    require_csrf(request)
+    global DOWNLOAD_SEQ
+    data = await request.json()
+    repo = safe_repo_id(data.get("repo") or "")
+    file_path = data.get("path") or ""
+    if not file_path.lower().endswith(".gguf"):
+        return web.json_response({"ok": False, "error": "scegli un file .gguf"}, status=400)
+    DOWNLOAD_SEQ += 1
+    job_id = str(DOWNLOAD_SEQ)
+    DOWNLOADS[job_id] = {"id": job_id, "repo": repo, "file": file_path, "status": "queued",
+                         "downloaded": 0, "total": 0, "path": str(model_dest(repo, file_path)), "error": ""}
+    asyncio.create_task(download_model_job(job_id, repo, file_path))
+    return web.json_response({"ok": True, "job": DOWNLOADS[job_id]})
+
+
+async def api_models_downloads(request):
+    return web.json_response({"ok": True, "downloads": list(DOWNLOADS.values())[-20:]})
+
+
+async def api_models_apply(request):
+    require_csrf(request)
+    data = await request.json()
+    role = data.get("role")
+    path = os.path.expanduser(data.get("path") or "")
+    if role not in ("big", "small"):
+        return web.json_response({"ok": False, "error": "ruolo non valido"}, status=400)
+    if not Path(path).is_file():
+        return web.json_response({"ok": False, "error": "file non trovato"}, status=400)
+    cfg = {}
+    try:
+        cfg = json.loads(CONFIG_FILE.read_text())
+    except Exception:
+        pass
+    cfg["big_gguf" if role == "big" else "small_gguf"] = path
+    CC_DIR.mkdir(exist_ok=True)
+    CONFIG_FILE.write_text(json.dumps(cfg, indent=2) + "\n")
+    return web.json_response({"ok": True, "config": cfg})
+
+
 # -------------------------------------------------------------- config & log
 async def api_config_get(request):
     try:
@@ -1099,6 +1223,11 @@ def main():
     app.router.add_get("/api/skills", api_skills)
     app.router.add_get("/api/research/search", api_research_search)
     app.router.add_get("/api/research/fetch", api_research_fetch)
+    app.router.add_get("/api/models/search", api_models_search)
+    app.router.add_get("/api/models/files", api_models_files)
+    app.router.add_post("/api/models/download", api_models_download)
+    app.router.add_get("/api/models/downloads", api_models_downloads)
+    app.router.add_post("/api/models/apply", api_models_apply)
     app.router.add_get("/api/config", api_config_get)
     app.router.add_put("/api/config", api_config_put)
     app.router.add_get("/api/logs", api_logs)

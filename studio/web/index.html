@@ -459,6 +459,23 @@
                             white-space: pre-wrap; font: 11px/1.45 var(--mono); color: var(--logtx); }
   .sourceCard .row { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
   .sourceCard button { padding: 6px 10px; font-size: 12px; border-radius: 8px; }
+  .modelTop { display: flex; gap: 8px; margin: 12px 0 16px; align-items: stretch; flex-wrap: wrap; }
+  .modelTop input { flex: 1; min-width: 260px; background: var(--panel); color: var(--text);
+                    border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; outline: none; }
+  .modelTop input:focus { border-color: var(--accent); }
+  .modelLayout { display: grid; grid-template-columns: minmax(280px, 390px) 1fr; gap: 14px; align-items: start; }
+  .modelList, .fileList { display: grid; gap: 8px; }
+  .modelItem, .fileItem, .downloadItem { background: var(--panel); border: 1px solid var(--border);
+                                         border-radius: 10px; padding: 11px 12px; }
+  .modelItem { cursor: pointer; }
+  .modelItem:hover, .modelItem.on { border-color: var(--accent); }
+  .modelItem .name, .fileItem .name { font-weight: 600; font-size: 13px; word-break: break-all; }
+  .modelItem .meta, .fileItem .meta, .downloadItem .meta { color: var(--dim); font: 11px var(--mono); margin-top: 5px; }
+  .fileItem .row, .downloadItem .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 9px; }
+  .fileItem button, .downloadItem button { padding: 6px 10px; font-size: 12px; border-radius: 8px; }
+  .bar { height: 7px; background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-top: 8px; }
+  .bar span { display: block; height: 100%; width: 0; background: var(--accent); }
+  @media (max-width: 920px) { .modelLayout { grid-template-columns: 1fr; } }
   .lanBox { margin: 14px 0 18px; padding: 12px 14px; border: 1px solid var(--border);
             border-radius: 12px; background: var(--panel); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .lanBox .lanMain { font-weight: 600; }
@@ -544,6 +561,7 @@
   <div class="nav" data-p="status" onclick="go('status')"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M4 12h4l3-7 4 14 3-7h2"/></svg> Stato</div>
   <div class="nav" data-p="research" onclick="go('research')"><svg class="uiIcon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/><path d="M8 11h6M11 8v6"/></svg> Ricerca</div>
   <div class="nav" data-p="skills" onclick="go('skills')"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12 4 7.5"/></svg> Skills</div>
+  <div class="nav" data-p="models" onclick="go('models')"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M4 7h16v10H4z"/><path d="M8 11h8M8 14h5M7 20h10M9 4h6"/></svg> Modelli</div>
   <div class="nav" data-p="config" onclick="go('config')"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg> Impostazioni</div>
   <div class="nav" data-p="logs" onclick="go('logs')"><svg class="uiIcon" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 12h6M10 16h6"/></svg> Log</div>
   <div class="nav" data-p="info" onclick="go('info')"><svg class="uiIcon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg> Info</div>
@@ -658,6 +676,26 @@
     <h1 style="margin-top:28px">Setup doctor</h1>
     <div class="sub">Verifica dei requisiti, con il rimedio quando manca qualcosa.</div>
     <div class="cards" id="docCards"></div>
+  </div></div>
+
+  <!-- ============ MODELLI ============ -->
+  <div class="page" id="modelsPage"><div class="pad">
+    <h1>Modelli</h1>
+    <div class="sub">Cerca repository GGUF su Hugging Face, scarica file e imposta big/small nella configurazione.</div>
+    <div class="modelTop">
+      <input id="modelQuery" type="search" placeholder="Cerca modelli GGUF, es. Qwen3.6 35B">
+      <button class="primary" id="btnModelSearch">Cerca</button>
+      <button id="btnDownloads">Download</button>
+    </div>
+    <div class="sub" id="modelMsg"></div>
+    <div class="modelLayout">
+      <div class="modelList" id="modelList"></div>
+      <div>
+        <div class="fileList" id="fileList"></div>
+        <h1 style="font-size:16px;margin-top:18px">Download</h1>
+        <div class="fileList" id="downloadList"></div>
+      </div>
+    </div>
   </div></div>
 
   <!-- ============ RICERCA ============ -->
@@ -808,7 +846,123 @@ function navTo(page) {
   if (page === "logs") loadLogs();
   if (page === "config") loadConfig();
   if (page === "skills") loadSkills();
+  if (page === "models") loadDownloads();
   applyWorkVisibility();
+}
+
+/* ============ download modelli Hugging Face ============ */
+let modelResults = [], selectedModel = "", modelFiles = [], downloadTimer = null;
+const fmtBytes = b => {
+  b = Number(b || 0);
+  if (!b) return "dimensione sconosciuta";
+  const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0;
+  while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+  return `${b.toFixed(i ? 1 : 0)} ${u[i]}`;
+};
+
+async function searchModels() {
+  const q = $("#modelQuery").value.trim() || "GGUF";
+  $("#modelMsg").textContent = "ricerca modelli…";
+  $("#modelList").innerHTML = ""; $("#fileList").innerHTML = "";
+  try {
+    const j = await (await fetch("/api/models/search?q=" + encodeURIComponent(q))).json();
+    if (!j.ok) throw new Error(j.error || "ricerca non riuscita");
+    modelResults = j.models || [];
+    $("#modelMsg").textContent = `${modelResults.length} repository`;
+  } catch (e) {
+    modelResults = [];
+    $("#modelMsg").textContent = "errore: " + e.message;
+  }
+  renderModels();
+}
+
+function renderModels() {
+  $("#modelList").innerHTML = modelResults.map(m => `
+    <div class="modelItem ${m.id === selectedModel ? "on" : ""}" data-repo="${esc(m.id)}">
+      <div class="name">${esc(m.id)}</div>
+      <div class="meta">${Number(m.downloads || 0).toLocaleString()} download · ${Number(m.likes || 0).toLocaleString()} like</div>
+      <div class="meta">${esc((m.tags || []).slice(0, 5).join(" · "))}</div>
+    </div>`).join("") || `<div class="sub">Nessun repository.</div>`;
+  $("#modelList").querySelectorAll(".modelItem").forEach(el => el.onclick = () => loadModelFiles(el.dataset.repo));
+}
+
+async function loadModelFiles(repo) {
+  selectedModel = repo; modelFiles = []; renderModels();
+  $("#fileList").innerHTML = `<div class="sub">lettura file…</div>`;
+  try {
+    const j = await (await fetch("/api/models/files?repo=" + encodeURIComponent(repo))).json();
+    if (!j.ok) throw new Error(j.error || "lista file non riuscita");
+    modelFiles = j.files || [];
+  } catch (e) {
+    $("#fileList").innerHTML = `<div class="sub">errore: ${esc(e.message)}</div>`;
+    return;
+  }
+  renderModelFiles();
+}
+
+function renderModelFiles() {
+  $("#fileList").innerHTML = modelFiles.map((f, i) => `
+    <div class="fileItem">
+      <div class="name">${esc(f.path)}</div>
+      <div class="meta">${fmtBytes(f.size)}${f.downloaded ? " · già presente" : ""}</div>
+      <div class="meta">${esc(f.local)}</div>
+      <div class="row">
+        <button class="primary" data-dl="${i}">${f.downloaded ? "Riscarica" : "Scarica"}</button>
+        ${f.downloaded ? `<button data-apply="big:${i}">Usa come big</button><button data-apply="small:${i}">Usa come small</button>` : ""}
+      </div>
+    </div>`).join("") || `<div class="sub">Nessun file GGUF trovato.</div>`;
+  $("#fileList").querySelectorAll("button[data-dl]").forEach(btn => btn.onclick = () => startDownload(modelFiles[+btn.dataset.dl]));
+  $("#fileList").querySelectorAll("button[data-apply]").forEach(btn => {
+    btn.onclick = () => {
+      const [role, idx] = btn.dataset.apply.split(":");
+      applyModel(role, modelFiles[+idx].local);
+    };
+  });
+}
+
+async function startDownload(file) {
+  if (!selectedModel || !file) return;
+  $("#modelMsg").textContent = "download avviato…";
+  const j = await (await fetch("/api/models/download", { method: "POST",
+    headers: { "Content-Type": "application/json", ...HDRS },
+    body: JSON.stringify({ repo: selectedModel, path: file.path }) })).json();
+  $("#modelMsg").textContent = j.ok ? "download in coda" : j.error;
+  loadDownloads();
+}
+
+async function loadDownloads() {
+  try {
+    const j = await (await fetch("/api/models/downloads")).json();
+    renderDownloads(j.downloads || []);
+  } catch {}
+  if (!downloadTimer) downloadTimer = setInterval(loadDownloads, 1500);
+}
+
+function renderDownloads(items) {
+  $("#downloadList").innerHTML = items.slice().reverse().map(d => {
+    const pct = d.total ? Math.min(100, Math.round(d.downloaded * 100 / d.total)) : 0;
+    return `<div class="downloadItem">
+      <div class="name">${esc(d.repo + "/" + d.file)}</div>
+      <div class="meta">${esc(d.status)} · ${fmtBytes(d.downloaded)} / ${fmtBytes(d.total)}${d.error ? " · " + esc(d.error) : ""}</div>
+      <div class="bar"><span style="width:${pct}%"></span></div>
+      <div class="meta">${esc(d.path || "")}</div>
+      ${d.status === "done" ? `<div class="row"><button data-apply-path="big|${esc(d.path)}">Usa come big</button><button data-apply-path="small|${esc(d.path)}">Usa come small</button></div>` : ""}
+    </div>`;
+  }).join("") || `<div class="sub">Nessun download.</div>`;
+  $("#downloadList").querySelectorAll("button[data-apply-path]").forEach(btn => {
+    btn.onclick = () => {
+      const [role, path] = btn.dataset.applyPath.split("|");
+      applyModel(role, path);
+    };
+  });
+}
+
+async function applyModel(role, path) {
+  const j = await (await fetch("/api/models/apply", { method: "POST",
+    headers: { "Content-Type": "application/json", ...HDRS },
+    body: JSON.stringify({ role, path }) })).json();
+  $("#modelMsg").textContent = j.ok ? `config aggiornata: modello ${role}. Riavvia i server per applicare.` : j.error;
+  refreshStatus();
 }
 
 /* ============ ricerca web / source cards ============ */
@@ -2336,6 +2490,11 @@ setInterval(() => { if ($("#logAuto").checked) loadLogs(); }, 3000);
 $("#btnResearch").onclick = runResearch;
 $("#researchQuery").addEventListener("keydown", e => {
   if (e.key === "Enter") { e.preventDefault(); runResearch(); }
+});
+$("#btnModelSearch").onclick = searchModels;
+$("#btnDownloads").onclick = loadDownloads;
+$("#modelQuery").addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); searchModels(); }
 });
 $("#skillSearch").oninput = renderSkills;
 $("#btnSkillReload").onclick = () => loadSkills(true);
