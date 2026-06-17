@@ -793,6 +793,20 @@ const $ = s => document.querySelector(s);
 const HDRS = { "X-Requested-With": "ccllrun-studio" };
 const esc = t => { const d = document.createElement("div"); d.textContent = t; return d.innerHTML; };
 const base = p => p.replace(/\/+$/, "").split("/").pop() || p;
+function apiUrl(path, params = {}) {
+  const u = new URL(path, window.location.origin);
+  for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
+  return u.toString();
+}
+async function fetchJson(url, opts) {
+  const r = await fetch(url, opts);
+  const text = await r.text();
+  let j;
+  try { j = JSON.parse(text); }
+  catch { throw new Error(text.slice(0, 240) || `HTTP ${r.status}`); }
+  if (!r.ok || j.ok === false) throw new Error(j.error || `HTTP ${r.status}`);
+  return j;
+}
 const ICON_FOLDER = `<svg class="uiIcon" viewBox="0 0 24 24"><path d="M3 6.5h7l2 2h9v9.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 8.5h18"/></svg>`;
 const ICON_CHAT = `<svg class="uiIcon" viewBox="0 0 24 24"><path d="M5 6.5h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-8l-5 3v-3H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z"/></svg>`;
 
@@ -865,8 +879,7 @@ async function searchModels() {
   $("#modelMsg").textContent = "ricerca modelli…";
   $("#modelList").innerHTML = ""; $("#fileList").innerHTML = "";
   try {
-    const j = await (await fetch("/api/models/search?q=" + encodeURIComponent(q))).json();
-    if (!j.ok) throw new Error(j.error || "ricerca non riuscita");
+    const j = await fetchJson(apiUrl("/api/models/search", { q }));
     modelResults = j.models || [];
     $("#modelMsg").textContent = `${modelResults.length} repository`;
   } catch (e) {
@@ -890,8 +903,7 @@ async function loadModelFiles(repo) {
   selectedModel = repo; modelFiles = []; renderModels();
   $("#fileList").innerHTML = `<div class="sub">lettura file…</div>`;
   try {
-    const j = await (await fetch("/api/models/files?repo=" + encodeURIComponent(repo))).json();
-    if (!j.ok) throw new Error(j.error || "lista file non riuscita");
+    const j = await fetchJson(apiUrl("/api/models/files", { repo }));
     modelFiles = j.files || [];
   } catch (e) {
     $("#fileList").innerHTML = `<div class="sub">errore: ${esc(e.message)}</div>`;
@@ -923,16 +935,16 @@ function renderModelFiles() {
 async function startDownload(file) {
   if (!selectedModel || !file) return;
   $("#modelMsg").textContent = "download avviato…";
-  const j = await (await fetch("/api/models/download", { method: "POST",
+  const j = await fetchJson(apiUrl("/api/models/download"), { method: "POST",
     headers: { "Content-Type": "application/json", ...HDRS },
-    body: JSON.stringify({ repo: selectedModel, path: file.path }) })).json();
-  $("#modelMsg").textContent = j.ok ? "download in coda" : j.error;
+    body: JSON.stringify({ repo: selectedModel, path: file.path }) });
+  $("#modelMsg").textContent = "download in coda";
   loadDownloads();
 }
 
 async function loadDownloads() {
   try {
-    const j = await (await fetch("/api/models/downloads")).json();
+    const j = await fetchJson(apiUrl("/api/models/downloads"));
     renderDownloads(j.downloads || []);
   } catch {}
   if (!downloadTimer) downloadTimer = setInterval(loadDownloads, 1500);
@@ -958,10 +970,10 @@ function renderDownloads(items) {
 }
 
 async function applyModel(role, path) {
-  const j = await (await fetch("/api/models/apply", { method: "POST",
+  const j = await fetchJson(apiUrl("/api/models/apply"), { method: "POST",
     headers: { "Content-Type": "application/json", ...HDRS },
-    body: JSON.stringify({ role, path }) })).json();
-  $("#modelMsg").textContent = j.ok ? `config aggiornata: modello ${role}. Riavvia i server per applicare.` : j.error;
+    body: JSON.stringify({ role, path }) });
+  $("#modelMsg").textContent = `config aggiornata: modello ${role}. Riavvia i server per applicare.`;
   refreshStatus();
 }
 
