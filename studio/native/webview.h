@@ -153,7 +153,16 @@ static void (*g_on_terminate)(void) = NULL;
 - (void)webView:(WKWebView *)webView
     decidePolicyForNavigationAction:(WKNavigationAction *)action
                     decisionHandler:(void (^)(WKNavigationActionPolicy))handler {
-    (void)webView;
+    NSURL *url = action.request.URL;
+    if (url && ([url.scheme isEqualToString:@"http"] || [url.scheme isEqualToString:@"https"] || [url.scheme isEqualToString:@"mailto"])) {
+        NSURL *mainURL = webView.URL;
+        BOOL sameHost = mainURL && [url.host isEqualToString:mainURL.host] && [url.scheme isEqualToString:mainURL.scheme];
+        if (!sameHost || action.navigationType == WKNavigationTypeLinkActivated) {
+            [[NSWorkspace sharedWorkspace] openURL:url];
+            handler(WKNavigationActionPolicyCancel);
+            return;
+        }
+    }
     if (action.shouldPerformDownload) handler(WKNavigationActionPolicyDownload);
     else handler(WKNavigationActionPolicyAllow);
 }

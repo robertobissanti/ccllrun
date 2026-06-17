@@ -496,6 +496,9 @@
   .readmeBody { padding: 16px 20px; max-height: 460px; overflow: auto; }
   .readmeBody h1, .readmeBody h2, .readmeBody h3 { margin: 12px 0 8px; }
   .readmeBody p { margin: 8px 0; }
+  .readmeBody a, .body.md a, .wprevMd a { color: #6fb7ff; text-decoration-color: color-mix(in srgb, #6fb7ff 70%, transparent);
+                                           text-underline-offset: 2px; }
+  .readmeBody a:hover, .body.md a:hover, .wprevMd a:hover { color: #9fd0ff; }
   .moreRow { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-top: 1px solid var(--border); cursor: pointer; }
   .moreRow:hover { background: var(--panel2); }
   .moreRow .nm { flex: 1; font-weight: 600; }
@@ -1450,6 +1453,7 @@ function mdToHtml(src) {
     return "" + (maths.length - 1) + "";
   };
   src = src
+    .replace(/<br\s*\/?>/gi, "\n")
     .replace(/\\\[([\s\S]*?)\\\]/g, (_, m) => stashMath(m, "\\[", "\\]"))
     .replace(/\$\$([\s\S]*?)\$\$/g, (_, m) => stashMath(m, "$$", "$$"))
     .replace(/\\\(([\s\S]*?)\\\)/g, (_, m) => stashMath(m, "\\(", "\\)"))
@@ -1459,7 +1463,8 @@ function mdToHtml(src) {
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
     .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,;:!?]|$)/g, "$1<i>$2</i>")
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+    .replace(/&lt;a\s+href=&quot;(https?:\/\/[^&]+)&quot;[^&]*&gt;([^<]+)&lt;\/a&gt;/g, '<a href="$1" target="_blank" rel="noopener">$2</a>');
   // 2) riga per riga: titoli, liste, citazioni, tabelle, hr, paragrafi
   let html = "", list = null, para = [], tbl = null;
   const flushPara = () => { if (para.length) { html += `<p>${para.map(inline).join("<br>")}</p>`; para = []; } };
@@ -1990,6 +1995,11 @@ $("#btnWorkToggle").onclick = e => { e.stopPropagation(); toggleWorkPanel(); };
 $("#btnWorkMenu").onclick = e => { e.stopPropagation(); toggleWpMenu(); };
 document.addEventListener("click", e => {
   if (!e.target.closest("#wpMenuWrap")) toggleWpMenu(false);
+  const a = e.target.closest?.("a[href]");
+  if (a && /^https?:|^mailto:/i.test(a.getAttribute("href"))) {
+    a.setAttribute("target", "_blank");
+    a.setAttribute("rel", "noopener");
+  }
 });
 $("#btnWorkClose").onclick = () => setWorkHidden(true);
 applyWorkVisibility();
