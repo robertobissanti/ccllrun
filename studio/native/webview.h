@@ -48,6 +48,29 @@ static void      webview_run(webview_t w);
 "  });" \
 "})();"
 
+#define DS4_MODEL_PICKER_SCRIPT \
+"(() => {" \
+"  if (!window.webkit?.messageHandlers?.ds4PickModel || window.ds4PickModel) return;" \
+"  let seq = 1;" \
+"  const pending = new Map();" \
+"  window.__ds4NativeModelPicked = (id, path) => {" \
+"    const resolve = pending.get(String(id));" \
+"    if (!resolve) return;" \
+"    pending.delete(String(id));" \
+"    resolve(path || '');" \
+"  };" \
+"  window.ds4PickModel = (kind) => new Promise((resolve) => {" \
+"    const id = String(seq++);" \
+"    pending.set(id, resolve);" \
+"    try {" \
+"      window.webkit.messageHandlers.ds4PickModel.postMessage({id, kind});" \
+"    } catch (e) {" \
+"      pending.delete(id);" \
+"      resolve('');" \
+"    }" \
+"  });" \
+"})();"
+
 /* ============================ macOS ============================ */
 #ifdef __APPLE__
 #import <Cocoa/Cocoa.h>
@@ -272,6 +295,50 @@ static NSString *ds4_js_string(NSString *s) {
 }
 @end
 
+/* Model picker: GGUF is a file, MLX is the directory containing config.json.
+ * Start inside LM Studio's hidden model library and explicitly show hidden
+ * files so users never need to expose ~/.lmstudio in Finder first. */
+@interface DS4ModelPickerHandler : NSObject <WKScriptMessageHandler>
+@property (assign) NSWindow *win;
+@property (assign) WKWebView *webview;
+@end
+@implementation DS4ModelPickerHandler
+- (void)userContentController:(WKUserContentController *)ucc
+      didReceiveScriptMessage:(WKScriptMessage *)message {
+    (void)ucc;
+    NSDictionary *body = [message.body isKindOfClass:[NSDictionary class]] ? message.body : nil;
+    NSString *rid = [body[@"id"] isKindOfClass:[NSString class]] ? body[@"id"] : nil;
+    NSString *kind = [body[@"kind"] isKindOfClass:[NSString class]] ? body[@"kind"] : @"gguf";
+    if (!rid.length) return;
+
+    BOOL mlx = [kind isEqualToString:@"mlx"];
+    NSOpenPanel *panel = [NSOpenPanel openPanel];
+    panel.canChooseFiles = !mlx;
+    panel.canChooseDirectories = mlx;
+    panel.allowsMultipleSelection = NO;
+    panel.canCreateDirectories = NO;
+    panel.showsHiddenFiles = YES;
+    panel.prompt = @"Seleziona";
+    panel.message = mlx ? @"Seleziona la cartella del modello MLX."
+                        : @"Seleziona un modello GGUF.";
+    if (!mlx) panel.allowedFileTypes = @[@"gguf"];
+    NSString *models = [NSHomeDirectory() stringByAppendingPathComponent:@".lmstudio/models"];
+    BOOL isDir = NO;
+    if ([[NSFileManager defaultManager] fileExistsAtPath:models isDirectory:&isDir] && isDir)
+        panel.directoryURL = [NSURL fileURLWithPath:models isDirectory:YES];
+
+    void (^finish)(NSModalResponse) = ^(NSModalResponse r) {
+        NSString *path = (r == NSModalResponseOK && panel.URL) ? panel.URL.path : nil;
+        NSString *js = [NSString stringWithFormat:
+            @"window.__ds4NativeModelPicked&&window.__ds4NativeModelPicked(%@,%@)",
+            ds4_js_string(rid), path ? ds4_js_string(path) : @"null"];
+        [self.webview evaluateJavaScript:js completionHandler:nil];
+    };
+    if (self.win) [panel beginSheetModalForWindow:self.win completionHandler:finish];
+    else [panel beginWithCompletionHandler:finish];
+}
+@end
+
 typedef struct {
     NSWindow *window;
     WKWebView *webview;
@@ -396,8 +463,17 @@ static webview_t webview_create(int width, int height, const char *title) {
         injectionTime:WKUserScriptInjectionTimeAtDocumentStart
         forMainFrameOnly:YES];
     [cfg.userContentController addUserScript:dirScript];
+    DS4ModelPickerHandler *modelHandler = [[DS4ModelPickerHandler alloc] init];
+    modelHandler.win = win;
+    [cfg.userContentController addScriptMessageHandler:modelHandler name:@"ds4PickModel"];
+    WKUserScript *modelScript = [[WKUserScript alloc]
+        initWithSource:[NSString stringWithUTF8String:DS4_MODEL_PICKER_SCRIPT]
+        injectionTime:WKUserScriptInjectionTimeAtDocumentStart
+        forMainFrameOnly:YES];
+    [cfg.userContentController addUserScript:modelScript];
     WKWebView *wv = [[WKWebView alloc] initWithFrame:frame configuration:cfg];
     dirHandler.webview = wv;
+    modelHandler.webview = wv;
     [wv setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
     /* dark layer under the page: no white flash before the first paint */
     wv.wantsLayer = YES;

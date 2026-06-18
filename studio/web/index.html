@@ -546,6 +546,11 @@
     background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px;
     padding: 7px 10px; font: 12.5px var(--mono); outline: none; }
   .frow input[type=text] { flex: 2; min-width: 220px; }
+  .frow .pathCtl { flex: 2; min-width: 220px; display: flex; gap: 7px; }
+  .frow .pathCtl input[type=text] { flex: 1; min-width: 0; }
+  .frow .pickPath { width: 36px; flex: 0 0 36px; padding: 0; display: inline-flex;
+                    align-items: center; justify-content: center; }
+  .frow .pickPath svg { width: 17px; height: 17px; }
   .frow input[type=number] { width: 90px; }
   .frow input:focus, .frow select:focus { border-color: var(--accent); }
   .frow select { min-width: 110px; }
@@ -2420,10 +2425,10 @@ const fmtK = v => v >= 1024 ? Math.round(v / 1024) + "k" : v;
 const CFG_SCHEMA = [
   { sect: "Modelli" },
   { k: "backend", t: "select", opts: ["llama.cpp", "mlx-lm"], l: "Backend", d: "llama.cpp usa GGUF; mlx-lm usa cartelle MLX", def: "llama.cpp" },
-  { k: "big_gguf", t: "text", l: "GGUF big", d: "path del modello principale", def: "" },
-  { k: "small_gguf", t: "text", l: "GGUF small", d: "modello rapido (vuoto = nessuno)", def: "" },
-  { k: "big_mlx", t: "text", l: "MLX big", d: "cartella modello MLX, non file .safetensors", def: "" },
-  { k: "small_mlx", t: "text", l: "MLX small", d: "cartella modello MLX (opzionale)", def: "" },
+  { k: "big_gguf", t: "text", pick: "gguf", l: "GGUF big", d: "path del modello principale", def: "" },
+  { k: "small_gguf", t: "text", pick: "gguf", l: "GGUF small", d: "modello rapido (vuoto = nessuno)", def: "" },
+  { k: "big_mlx", t: "text", pick: "mlx", l: "MLX big", d: "cartella modello MLX, non file .safetensors", def: "" },
+  { k: "small_mlx", t: "text", pick: "mlx", l: "MLX small", d: "cartella modello MLX (opzionale)", def: "" },
   { k: "no_small", t: "switch", l: "Disattiva small", d: "non avviare il modello piccolo", def: false },
   { k: "model_big", t: "text", l: "Alias big", d: "nome esposto dall'API", def: "qwen-big" },
   { k: "model_small", t: "text", l: "Alias small", d: "", def: "small-fast" },
@@ -2476,7 +2481,12 @@ function renderCfgForm(cfg) {
     const v = cfg[f.k] ?? f.def;
     const id = "cf_" + f.k;
     let ctl = "";
-    if (f.t === "text") ctl = `<input type="text" id="${id}" value="${esc(String(v))}">`;
+    if (f.t === "text") {
+      const input = `<input type="text" id="${id}" value="${esc(String(v))}">`;
+      ctl = f.pick
+        ? `<span class="pathCtl">${input}<button type="button" class="pickPath" data-pick="${f.pick}" data-target="${id}" title="Seleziona ${f.pick === "mlx" ? "cartella MLX" : "file GGUF"}">${ICON_FOLDER}</button></span>`
+        : input;
+    }
     else if (f.t === "num") ctl = `<input type="number" id="${id}" value="${esc(String(v))}">`;
     else if (f.t === "switch")
       ctl = `<label class="sw"><input type="checkbox" id="${id}" ${v ? "checked" : ""}><span class="tk"></span></label>`;
@@ -2502,6 +2512,16 @@ function renderCfgForm(cfg) {
     if (el) el.addEventListener("input", validateCfgForm);
     if (el) el.addEventListener("change", validateCfgForm);
   }
+  $("#cfgForm").querySelectorAll(".pickPath").forEach(btn => btn.onclick = async () => {
+    let path = "";
+    if (window.ds4PickModel) path = await window.ds4PickModel(btn.dataset.pick);
+    else path = prompt(btn.dataset.pick === "mlx" ? "Percorso della cartella MLX:" : "Percorso del file GGUF:") || "";
+    if (!path) return;
+    const input = $("#" + btn.dataset.target);
+    input.value = path;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.focus();
+  });
 }
 
 function collectCfgForm() {
