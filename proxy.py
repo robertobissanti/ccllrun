@@ -295,6 +295,41 @@ def anthropic_tool_id(raw_id, index=0):
     return f"toolu_{raw or f'local_{int(time.time() * 1000)}_{index}'}"
 
 
+def extract_text_tool_uses(text):
+    """Recover Anthropic-style tool blocks emitted as plain text by mlx_lm."""
+    if not isinstance(text, str) or "[tool_use]" not in text:
+        return text, []
+
+    prefix, marker, remainder = text.partition("[tool_use]")
+    if not marker:
+        return text, []
+    decoder = json.JSONDecoder()
+    tool_uses = []
+    trailing = remainder
+    while True:
+        candidate = trailing.lstrip()
+        try:
+            block, consumed = decoder.raw_decode(candidate)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return text, []
+        if not isinstance(block, dict) or block.get("type") != "tool_use" or not block.get("name"):
+            return text, []
+        tool_uses.append(block)
+        trailing = candidate[consumed:]
+        before_next, next_marker, after_next = trailing.partition("[tool_use]")
+        if not next_marker:
+            trailing = before_next
+            break
+        if before_next.strip():
+            return text, []
+        trailing = after_next
+
+    remaining_text = prefix.rstrip()
+    if trailing.strip():
+        remaining_text = (remaining_text + "\n" + trailing.strip()).strip()
+    return remaining_text, tool_uses
+
+
 def anthropic_message_response(openai_data, model):
     message = {}
     try:
@@ -303,6 +338,7 @@ def anthropic_message_response(openai_data, model):
         message = {}
     content = []
     text = message.get("content")
+    text, embedded_tools = extract_text_tool_uses(text)
     if isinstance(text, str) and text:
         content.append({"type": "text", "text": text})
     for idx, call in enumerate(message.get("tool_calls") or []):
@@ -313,6 +349,15 @@ def anthropic_message_response(openai_data, model):
             "name": fn.get("name") or f"tool_{idx}",
             "input": parse_tool_arguments(fn.get("arguments")),
         })
+    for idx, call in enumerate(embedded_tools, start=len(message.get("tool_calls") or [])):
+        content.append({
+            "type": "tool_use",
+            "id": anthropic_tool_id(call.get("id"), idx),
+            "name": call["name"],
+            "input": parse_tool_arguments(call.get("input")),
+        })
+    if embedded_tools:
+        log.info("recovered %d tool call(s) from MLX text output", len(embedded_tools))
     if not content:
         content = [{"type": "text", "text": openai_message_text(openai_data)}]
     usage = openai_data.get("usage") if isinstance(openai_data, dict) else {}
