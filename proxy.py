@@ -37,6 +37,7 @@ from aiohttp import ClientSession, ClientTimeout, web
 
 UPSTREAM = os.environ.get("CCRUN_UPSTREAM", "http://127.0.0.1:1234").rstrip("/")
 UPSTREAM_SMALL = os.environ.get("CCRUN_UPSTREAM_SMALL", "").rstrip("/")
+UPSTREAM_EMBED = os.environ.get("CCRUN_UPSTREAM_EMBED", "").rstrip("/")
 UPSTREAM_API = os.environ.get("CCRUN_UPSTREAM_API", "anthropic").lower()
 SMALL_NAME = os.environ.get("CCRUN_SMALL_NAME", "small-fast")
 PORT = int(os.environ.get("CCRUN_PROXY_PORT", "8765"))
@@ -484,6 +485,27 @@ async def handle(request):
     model = "local"
     client_wants_stream = False
 
+    # /v1/embeddings: passthrough verso lo slot embedding dedicato (OpenAI-native,
+    # nessuna traduzione Anthropic). Se non configurato, 503 esplicito.
+    if request.path.endswith("/v1/embeddings"):
+        if not UPSTREAM_EMBED:
+            return web.json_response(
+                {"error": "embeddings non configurati: imposta embed_gguf in ~/.ccllrun/config.json"},
+                status=503)
+        target = UPSTREAM_EMBED
+        url = target + request.path_qs
+        try:
+            timeout = ClientTimeout(total=None, sock_connect=30)
+            async with ClientSession(timeout=timeout) as session:
+                headers = {k: v for k, v in request.headers.items() if k.lower() not in HOP_BY_HOP}
+                async with session.request(request.method, url, data=body, headers=headers) as up:
+                    data = await up.read()
+                    return web.Response(status=up.status, body=data, headers={
+                        k: v for k, v in up.headers.items() if k.lower() not in RESP_SKIP})
+        except Exception as exc:
+            log.error("upstream embeddings non raggiungibile: %s", exc)
+            return web.json_response({"error": f"upstream embeddings non raggiungibile: {exc}"}, status=502)
+
     if request.method == "POST" and request.path.endswith("/v1/messages"):
         try:
             data = json.loads(body)
@@ -629,7 +651,8 @@ async def handle(request):
 
 
 def main():
-    log.info("upstream=%s  small=%s  listen=127.0.0.1:%d  pdf_mode=%s", UPSTREAM, UPSTREAM_SMALL or "-", PORT, PDF_MODE)
+    log.info("upstream=%s  small=%s  embed=%s  listen=127.0.0.1:%d  pdf_mode=%s",
+             UPSTREAM, UPSTREAM_SMALL or "-", UPSTREAM_EMBED or "-", PORT, PDF_MODE)
     app = web.Application(client_max_size=1024 ** 3)  # 1 GB, base64 PDF puo' essere grande
     app.router.add_route("*", "/{tail:.*}", handle)
     web.run_app(app, host="127.0.0.1", port=PORT, print=None)

@@ -211,6 +211,9 @@ Precedence (weakest to strongest): **built-in defaults → `~/.ccllrun/config.js
 | `proxy_port` | `ccllrun_PROXY_PORT` | `--port` | 8765 | proxy port |
 | `big_port` | `ccllrun_BIG_PORT` | — | 8001 | big llama-server port |
 | `small_port` | `ccllrun_SMALL_PORT` | — | 8002 | small llama-server port |
+| `embed_gguf` | — | — | `""` | optional embedding GGUF; if set, starts a third server exposing `/v1/embeddings` through the proxy (semantic search / RAG). A non-embedding GGUF here is rejected for big/small but only warned about here |
+| `embed_port` | — | — | 8003 | embedding llama-server port |
+| `model_embed` | — | — | `embed` | API alias of the embedding model |
 | `llama_bin` | `ccllrun_LLAMA_BIN` | — | `llama-server` | llama-server binary |
 | `extra_big_flags` | — | — | `""` | extra flags for the big server, e.g. `"--mlock --kv-unified"` |
 | `cc_auto_compact_window` | — | — | 115000 | Claude Code auto-compact threshold (keep it **below `ctx_big`**) |
@@ -243,6 +246,8 @@ The config table above is a flat list; this section explains the reasoning behin
 **Documents and vision.** `pdf_mode` decides how `document` blocks reach a text-only local model: `text` extracts text, `image` rasterizes pages, `hybrid` extracts text and only rasterizes when there's too little of it (`CCRUN_PDF_TEXT_MIN`). Images and screenshots work when an `mmproj-*.gguf` projector sits next to the big GGUF — without it, vision input is dropped with a clear message instead of failing.
 
 **Generation quality.** `kv_type` quantizes the KV cache (`q8_0` halves its memory for a negligible quality loss — the default that lets a larger context fit); `reasoning_budget` caps thinking tokens; `presence_penalty` fights repetition but degrades code if pushed too high, so it's exposed for per-model tuning.
+
+**Embeddings and the embedding guard.** Embedding models turn text into vectors instead of generating text — they have no stop token, so if one is set as `big_gguf`/`small_gguf` it never stops generating and spins forever. ccllrun now **detects** an embedding GGUF (via the `<arch>.pooling_type` metadata key) and refuses to start the big/small slot with one, with a clear error instead of a silent loop; the Studio setup doctor flags it too. Embedding models are still useful — semantic search and RAG over standards, datasheets and code — so they get their own opt-in slot: set `embed_gguf` and ccllrun starts a third server, exposed as `/v1/embeddings` through the proxy (a request to that path returns `503` when no embedding model is configured). The benefit: the same mistake that caused the infinite loop now turns into a usable retrieval endpoint, on its own port, without touching chat.
 
 ### Proxy environment variables
 

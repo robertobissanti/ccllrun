@@ -70,6 +70,7 @@ STUDIO_PARENT_PID = int(os.environ.get("STUDIO_PARENT_PID", "0") or 0)
 
 DEFAULTS = {
     "big_port": 8001, "small_port": 8002, "proxy_port": 8765,
+    "embed_port": 8003, "embed_gguf": "", "model_embed": "embed",
     "backend": "llama.cpp",
     "model_big": "qwen-big", "model_small": "small-fast",
     "big_gguf": str(Path.home() / ".lmstudio/models/unsloth/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"),
@@ -170,6 +171,11 @@ async def api_status(request):
     except Exception:
         pass
 
+    # un GGUF di embedding in big/small manderebbe la chat in loop: rilevalo
+    big_emb = gguf_is_embedding(big_gguf) if backend == "llama.cpp" else ""
+    small_emb = gguf_is_embedding(small_gguf) if backend == "llama.cpp" else ""
+    embed_gguf = cfg.get("embed_gguf") or ""
+
     doctor = [
         check(backend == "llama.cpp" or backend == "mlx-lm", "backend", backend,
               "usa llama.cpp oppure mlx-lm", action={"kind": "config", "label": "Apri Impostazioni"}),
@@ -185,10 +191,10 @@ async def api_status(request):
               "creato automaticamente al primo `ccllrun`", warn=True, action={"kind": "start", "label": "Avvia stack"}),
         check(Path(CCLLRUN_BIN).is_file(), "script ccllrun", CCLLRUN_BIN,
               "imposta CCLLRUN_BIN o reinstalla lo script"),
-        check(backend != "llama.cpp" or (big_gguf and Path(big_gguf).is_file() and str(big_gguf).lower().endswith(".gguf")), "GGUF big", big_gguf or "non configurato",
-              "imposta big_gguf in config.json", action={"kind": "config", "label": "Apri Impostazioni"}),
-        check(backend != "llama.cpp" or (small_gguf and Path(small_gguf).is_file() and str(small_gguf).lower().endswith(".gguf")), "GGUF small", small_gguf or "non configurato",
-              "opzionale: small_gguf in config.json (o no_small: true)", warn=True, action={"kind": "config", "label": "Apri Impostazioni"}),
+        check(backend != "llama.cpp" or (big_gguf and Path(big_gguf).is_file() and str(big_gguf).lower().endswith(".gguf") and not big_emb), "GGUF big", (big_emb and f"{big_gguf} — {big_emb}") or big_gguf or "non configurato",
+              big_emb and "scegli un modello generativo per big_gguf" or "imposta big_gguf in config.json", action={"kind": "config", "label": "Apri Impostazioni"}),
+        check(backend != "llama.cpp" or (small_gguf and Path(small_gguf).is_file() and str(small_gguf).lower().endswith(".gguf") and not small_emb), "GGUF small", (small_emb and f"{small_gguf} — {small_emb}") or small_gguf or "non configurato",
+              small_emb and "scegli un modello generativo per small_gguf (l'embedding va in embed_gguf)" or "opzionale: small_gguf in config.json (o no_small: true)", warn=not small_emb, action={"kind": "config", "label": "Apri Impostazioni"}),
         check(backend != "mlx-lm" or looks_like_mlx_dir(big_mlx), "MLX big", big_mlx or "non configurato",
               mlx_dir_error(big_mlx) or "imposta big_mlx alla cartella del modello MLX", action={"kind": "config", "label": "Apri Impostazioni"}),
         check(backend != "mlx-lm" or not small_mlx or looks_like_mlx_dir(small_mlx), "MLX small", small_mlx or "non configurato",
@@ -222,6 +228,11 @@ async def api_status(request):
         )
     proxy_up = await http_json(f"http://127.0.0.1:{proxy_port}/v1/models") is not None
 
+    embed_port = int(cfg.get("embed_port", DEFAULTS["embed_port"]))
+    embed_health = None
+    if backend == "llama.cpp" and embed_gguf:
+        embed_health = await http_json(f"http://127.0.0.1:{embed_port}/health")
+
     servers = {
         "big": {"up": big_health is not None, "port": big_port, "alias": cfg.get("model_big"),
                 "pid": pid_alive("llama-big.pid"),
@@ -237,6 +248,10 @@ async def api_status(request):
                   "model_path": (small_props or {}).get("model_path") or (small_mlx if backend == "mlx-lm" else small_gguf)},
         "proxy": {"up": proxy_up, "port": proxy_port, "pid": pid_alive("proxy.pid")},
     }
+    if backend == "llama.cpp" and embed_gguf:
+        servers["embed"] = {"up": embed_health is not None, "port": embed_port,
+                            "alias": cfg.get("model_embed", DEFAULTS["model_embed"]),
+                            "pid": pid_alive("llama-embed.pid"), "model_path": embed_gguf}
     return web.json_response({"doctor": doctor, "servers": servers, "config": cfg,
                               "studio": {"host": STUDIO_HOST, "port": STUDIO_PORT,
                                          "lan_enabled": STUDIO_HOST == "0.0.0.0",
@@ -1022,6 +1037,53 @@ def looks_like_mlx_dir(path):
     return not mlx_dir_error(path)
 
 
+def gguf_is_embedding(path):
+    """Restituisce un motivo se il GGUF è un modello di embedding (non serve la
+    chat: nessun stop token -> loop). Stringa vuota se generativo o non leggibile.
+    Segnale: chiave GGUF '<arch>.pooling_type' presente solo sugli embedding."""
+    try:
+        p = Path(path).expanduser()
+        if not p.is_file():
+            return ""
+        with open(p, "rb") as f:
+            if f.read(4) != b"GGUF":
+                return ""
+            struct.unpack("<I", f.read(4))   # version
+            f.read(8)                        # tensor count
+            n_kv, = struct.unpack("<Q", f.read(8))
+            def rd_str():
+                n, = struct.unpack("<Q", f.read(8)); return f.read(n).decode("utf-8", "replace")
+            def rd_val(t):
+                if t == 0:  return struct.unpack("<B", f.read(1))[0]
+                if t == 1:  return struct.unpack("<b", f.read(1))[0]
+                if t == 2:  return struct.unpack("<H", f.read(2))[0]
+                if t == 3:  return struct.unpack("<h", f.read(2))[0]
+                if t == 4:  return struct.unpack("<I", f.read(4))[0]
+                if t == 5:  return struct.unpack("<i", f.read(4))[0]
+                if t == 6:  return struct.unpack("<f", f.read(4))[0]
+                if t == 7:  return struct.unpack("<?", f.read(1))[0]
+                if t == 8:  return rd_str()
+                if t == 9:
+                    et, = struct.unpack("<I", f.read(4)); ln, = struct.unpack("<Q", f.read(8))
+                    return [rd_val(et) for _ in range(ln)]
+                if t == 10: return struct.unpack("<Q", f.read(8))[0]
+                if t == 11: return struct.unpack("<q", f.read(8))[0]
+                if t == 12: return struct.unpack("<d", f.read(8))[0]
+                raise ValueError(t)
+            name = ""
+            for _ in range(n_kv):
+                key = rd_str(); t, = struct.unpack("<I", f.read(4)); val = rd_val(t)
+                if key.endswith(".pooling_type"):
+                    return "è un modello di embedding, non può servire la chat (usalo in embed_gguf)"
+                if key == "general.name":
+                    name = str(val)
+            if "embedding" in name.lower():
+                return "il nome indica un modello di embedding (usalo in embed_gguf)"
+    except Exception:
+        pass
+    return ""
+
+
 def validate_model_config(cfg):
     errors = []
     backend = str(cfg.get("backend") or "llama.cpp")
@@ -1033,6 +1095,10 @@ def validate_model_config(cfg):
             value = str(cfg.get(key) or "").strip()
             if value and not value.lower().endswith(".gguf"):
                 errors.append(f"{key} deve puntare a un file .gguf")
+            elif value:
+                emb = gguf_is_embedding(value)
+                if emb:
+                    errors.append(f"{key} {emb}")
     if backend == "mlx-lm":
         for key in ("big_mlx", "small_mlx"):
             value = str(cfg.get(key) or "").strip()
