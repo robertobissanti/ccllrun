@@ -11,6 +11,7 @@
 [![Platform](https://img.shields.io/badge/platform-macOS%20Apple%20Silicon-black?logo=apple)](#requirements)
 [![100% Local](https://img.shields.io/badge/AI-100%25%20local-success)](#)
 [![Engine](https://img.shields.io/badge/engine-llama.cpp-blue)](https://github.com/ggml-org/llama.cpp)
+[![MLX](https://img.shields.io/badge/backend-MLX-5E5CE6)](https://github.com/ml-explore/mlx)
 [![Agent](https://img.shields.io/badge/agent-Claude%20Code-d97757)](https://docs.anthropic.com/claude-code)
 [![Models](https://img.shields.io/badge/models-GGUF%20%C2%B7%20Qwen-purple)](#models)
 
@@ -18,7 +19,11 @@
 
 </div>
 
-`ccllrun` runs [Claude Code](https://docs.anthropic.com/claude-code) on open models served locally by **llama.cpp** (`llama-server`), through a proxy that translates the Anthropic API into an OpenAI-compatible one. It ships with **ccllrun Studio**, a native macOS app with chat, stack management, interactive permission approval and graphical configuration.
+`ccllrun` is a practical tool for using [Claude Code](https://docs.anthropic.com/claude-code) with local models in a way that feels usable every day: fast enough, predictable enough, and with the right controls exposed. It is not a new inference engine. It coordinates existing local runtimes — **llama.cpp** for GGUF models and **MLX** for MLX model directories — through a proxy that translates Claude Code's Anthropic API calls into an OpenAI-compatible local API.
+
+The goal is simple: remove the bottlenecks that make local Claude Code sessions feel slow or fragile, without reducing answer quality. That means taking care of the whole path, not just starting a model: model routing, context size, parallel slots, prefill batch and micro-batch, KV cache format, prompt-cache stability, auto-compaction, tool calls, PDF/image handling, process cleanup and the configuration UI.
+
+It can be used from the terminal, like Claude Code itself, or through **ccllrun Studio**, a native macOS app with the same role that Claude Desktop has next to the Claude CLI: a graphical surface for chat, stack status, logs, permissions and configuration.
 
 ```
 Claude Code ──ANTHROPIC_BASE_URL──▶ proxy.py (:8765) ──┬──▶ llama-server LARGE LLM (:8001, e.g. Qwen3.6-35B-A3B)
@@ -26,7 +31,7 @@ Claude Code ──ANTHROPIC_BASE_URL──▶ proxy.py (:8765) ──┬──�
 ccllrun Studio (:8770) ─── native dashboard: headless chat, status, config, logs
 ```
 
-Everything stays on your machine: the engine listens on `127.0.0.1` only, no data ever leaves.
+Everything stays on your machine: by default the engine listens on `127.0.0.1` only, no data ever leaves.
 
 Current Studio version: **0.1 (0.1)**. Author/contact: **Roberto Bissanti** — [roberto.bissanti@gmail.com](mailto:roberto.bissanti@gmail.com). License: **MIT**.
 
@@ -44,12 +49,15 @@ First run bootstraps the rest by itself: `~/.ccllrun/`, the Python venv with the
 
 ## Features
 
-- **CLI** (`ccllrun`): starts big + small + proxy and opens Claude Code already pointed at the local model; on exit the proxy stops (llama-servers stay warm for the next launch).
+- **CLI** (`ccllrun`): starts large LLM + small LLM + proxy and opens Claude Code already pointed at the local model; on exit the proxy stops and the model servers can stay warm for the next launch.
+- **Studio** (`ccllrun Studio.app`): a native macOS companion app for the same stack: chat, start/stop/restart, health checks, logs, interactive permissions and graphical configuration.
 - **Two LLMs**: a large LLM for the real work, a small LLM for Claude Code's quick requests (`ANTHROPIC_SMALL_FAST_MODEL`). Internally the config keys still use `big` and `small`.
+- **Two backends**: `llama.cpp` for GGUF files and `mlx-lm` for MLX directories, selected with the same config and UI.
+- **Embedding/RAG slot**: an optional third llama.cpp server exposes `/v1/embeddings` through the proxy for semantic search over documents, standards, datasheets or code.
 - **PDF**: the proxy converts `document` blocks into extracted text or rasterized pages (`text`/`image`/`hybrid`).
 - **Vision**: with the `mmproj-*.gguf` projector next to the GGUF, screenshots and images just work.
 - **Right-sized context**: Claude Code's auto-compact window is aligned to the model's real context (`CLAUDE_CODE_AUTO_COMPACT_WINDOW`), preventing Metal out-of-memory crashes.
-- **ccllrun Studio** (macOS app): a chat that *is* headless Claude Code (same tools, same permissions), **interactive permission approval** per command with persistent per-project rules, markdown rendering, slash commands with autocomplete (`/context`, `/memory`, `/compact`, …), stack autostart, setup doctor with remedies, config editor, live logs.
+- **Prompt-cache aware proxy**: prompt rendering is kept stable so llama-server can reuse the already processed prefix between turns.
 
 ## Requirements
 
@@ -77,17 +85,47 @@ For the 35B-A3B Q4_K_XL: ~20 GB of weights + KV cache (depends on `ctx_big` and 
 
 ## Models
 
-The ones used and tested by the author (Hugging Face links):
+ccllrun does not require one fixed model. It is built around roles: a **large LLM** for the main coding/reasoning work, a **small LLM** for Claude Code's faster auxiliary calls, and optionally an **embedding model** for semantic search/RAG. The current experimental setup uses the following models.
 
-| Role | Model | Link |
+### GGUF / llama.cpp
+
+| Role | Model | Config key | Link |
+|---|---|---|---|
+| **Large LLM** | Qwen3.6-35B-A3B, Q4_K_XL, with `mmproj-F32.gguf` for vision | `big_gguf`, `mmproj` | [unsloth/Qwen3.6-35B-A3B-GGUF](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF) |
+| Large LLM alternative | Qwen3.6-27B with MTP, useful for speculative decoding experiments | `big_gguf` | [unsloth/Qwen3.6-27B-MTP-GGUF](https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF) |
+| **Small LLM** | history-9b, Q4_K_M | `small_gguf` | [ghost-actual/Qwen3.6-9B-Heretic-History-Q4_K_M-GGUF](https://huggingface.co/ghost-actual/Qwen3.6-9B-Heretic-History-Q4_K_M-GGUF) |
+
+Download the `.gguf` files and set the paths in `~/.ccllrun/config.json`. Any chat-instruct GGUF can be used, but the defaults are tuned around a large Qwen model plus a smaller fast model. If the filename contains `MTP`, ccllrun enables speculative decoding by itself.
+
+### MLX
+
+MLX support is implemented through `mlx_lm.server`, not by loading MLX files directly in the proxy. In practice:
+
+- set `"backend": "mlx-lm"`;
+- set `big_mlx` and `small_mlx` to **model directories**, not to individual `.safetensors` files;
+- keep GGUF paths available if you switch back to `"backend": "llama.cpp"`;
+- remember that llama.cpp-only knobs such as `batch`, `ubatch`, `cache_reuse`, `kv_type` and `ngl` do not map to MLX server flags.
+
+The proxy keeps the same Claude Code-facing API for both backends. It also handles MLX-specific tool-call behavior: when an MLX model emits tool calls as text, the proxy recovers them and returns them in the Anthropic-compatible shape Claude Code expects.
+
+Models used in the MLX experiments:
+
+| Role | Model directory / repo | Config key |
 |---|---|---|
-| **Large LLM** | Qwen3.6-35B-A3B (MoE, Q4_K_XL) + mmproj for vision | [unsloth/Qwen3.6-35B-A3B-GGUF](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF) |
-| Large LLM (alternative) | Qwen3.6-27B with MTP (native speculative decoding) | [unsloth/Qwen3.6-27B-MTP-GGUF](https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF) |
-| **Small LLM** | history-9b (Q4_K_M) | [ghost-actual/Qwen3.6-9B-Heretic-History-Q4_K_M-GGUF](https://huggingface.co/ghost-actual/Qwen3.6-9B-Heretic-History-Q4_K_M-GGUF) |
+| **Large LLM** | `lmstudio-community/gemma-4-26B-A4B-it-QAT-MLX-4bit` | `big_mlx` |
+| **Small LLM** | `lmstudio-community/gemma-4-E2B-it-MLX-4bit` | `small_mlx` |
 
-Download the `.gguf` files (and the optional `mmproj-*.gguf` into the big model's folder) and set the paths in `~/.ccllrun/config.json`. Any chat-instruct GGUF works; if the filename contains `MTP`, ccllrun enables speculative decoding by itself.
+### Embeddings and RAG
 
-Studio can also search and download MLX repositories, but MLX models are configured as directories (`big_mlx` / `small_mlx`), not as single files. `big_gguf` and `small_gguf` only accept `.gguf` files because the `llama.cpp` backend cannot start `.safetensors` files.
+ccllrun can start a dedicated embedding server in addition to the large/small LLM servers. This is separate from chat generation: embeddings turn text chunks into vectors for semantic search, document retrieval and RAG workflows.
+
+| Role | Model | Config key | Link |
+|---|---|---|---|
+| **Embedding** | Qwen3-Embedding-8B, Q4_K_M | `embed_gguf` | [Qwen/Qwen3-Embedding-8B-GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-8B-GGUF) |
+
+When `embed_gguf` is set, ccllrun starts a third `llama-server` on `embed_port` with embedding mode enabled, and the proxy exposes it as `/v1/embeddings` using the alias `model_embed` (`embed` by default). This is the path used for RAG experiments over technical material such as standards, datasheets, project documents and code.
+
+Embedding models are guarded deliberately: if an embedding GGUF is accidentally configured as the large or small LLM, ccllrun refuses to start it there. Embedding models do not generate normal chat completions and can otherwise appear to loop forever.
 
 ## CLI reference
 
@@ -142,6 +180,8 @@ ccllrun logs proxy     # Anthropic→OpenAI requests, PDF conversions, 4xx/5xx
 
 ## ccllrun Studio (macOS app)
 
+Studio is the graphical companion to the CLI, in the same spirit as Claude Desktop next to Claude Code in the terminal. It does not replace the CLI: it gives the same local stack a native macOS surface for daily use.
+
 ```bash
 cd studio
 make run        # builds and opens "ccllrun Studio.app"
@@ -149,6 +189,8 @@ make serve      # server only on :8770 (development / LAN with STUDIO_HOST=0.0.0
 ```
 
 On launch Studio starts the stack by itself (big + small + proxy), just like the CLI; disable with `"studio_autostart": false`.
+
+The Status page is intentionally operational: if the stack is only partially alive, or if stale processes are still bound to the expected ports, Studio asks ccllrun to clean up and restart the whole stack instead of trusting an inconsistent state. This is important for local inference, where a single stuck server can make the UI look alive while Claude Code cannot actually work.
 
 ### Building and Gatekeeper (code signing)
 
@@ -172,7 +214,7 @@ The app is **not distributed pre-built**: you compile it yourself with `make`. T
 - **LaTeX math** in replies through vendored MathJax (`$...$`, `$$...$$`, `\(...\)`, `\[...\]`), rendered offline as SVG.
 - **Slash commands** with autocomplete: `/context`, `/memory`, `/compact`, `/cost`, `/init`, plus the project's custom commands.
 - **Status**: Start/Stop toggle + Restart, server health cards, setup doctor with remedies.
-- **Config**: graphical (or raw JSON) editor for `~/.ccllrun/config.json`, with Basic/Advanced sections, localized labels/tooltips (`it`, `en`, `es`, `fr`, `de`, `pt`) and explicit units for token/slot values. After changing server parameters: Restart.
+- **Config**: graphical (or raw JSON) editor for `~/.ccllrun/config.json`, with Basic/Advanced sections, localized labels/tooltips (`it`, `en`, `es`, `fr`, `de`, `pt`) and explicit units for token/slot values. The UI uses "large LLM" and "small LLM" labels even though the underlying config keys remain `big` and `small`. After changing server parameters: Restart.
 - **Live logs** for big/small/proxy.
 - **Info** page with version 0.1, author email, copyright and MIT license.
 
@@ -300,7 +342,7 @@ After changing server parameters: `ccllrun stop` and restart (or Studio → Stat
 
 ## Author
 
-**Roberto Bissanti** ([roberto.bissanti@gmail.com](mailto:roberto.bissanti@gmail.com)) — a photovoltaic-sector engineer who uses local AI for everyday technical work. ccllrun was born from the practical need of running Claude Code on his own hardware (Mac Studio M1 Ultra), with documents that never leave the machine.
+**Roberto Bissanti** ([roberto.bissanti@gmail.com](mailto:roberto.bissanti@gmail.com)) is an aerospace engineer working in renewable energy, with expertise in integrated multi-source stand-alone systems. ccllrun was born from the practical need to use Claude Code on his own hardware (Mac Studio M1 Ultra), with technical documents, project data and code that never leave the machine.
 
 ## Credits and license
 
