@@ -21,8 +21,8 @@
 `ccllrun` runs [Claude Code](https://docs.anthropic.com/claude-code) on open models served locally by **llama.cpp** (`llama-server`), through a proxy that translates the Anthropic API into an OpenAI-compatible one. It ships with **ccllrun Studio**, a native macOS app with chat, stack management, interactive permission approval and graphical configuration.
 
 ```
-Claude Code ──ANTHROPIC_BASE_URL──▶ proxy.py (:8765) ──┬──▶ llama-server BIG   (:8001, e.g. Qwen3.6-35B-A3B)
-                                                       └──▶ llama-server SMALL (:8002, small/fast model)
+Claude Code ──ANTHROPIC_BASE_URL──▶ proxy.py (:8765) ──┬──▶ llama-server LARGE LLM (:8001, e.g. Qwen3.6-35B-A3B)
+                                                       └──▶ llama-server SMALL LLM (:8002, small/fast model)
 ccllrun Studio (:8770) ─── native dashboard: headless chat, status, config, logs
 ```
 
@@ -45,7 +45,7 @@ First run bootstraps the rest by itself: `~/.ccllrun/`, the Python venv with the
 ## Features
 
 - **CLI** (`ccllrun`): starts big + small + proxy and opens Claude Code already pointed at the local model; on exit the proxy stops (llama-servers stay warm for the next launch).
-- **Two models**: a big one for the real work, a small one for Claude Code's quick requests (`ANTHROPIC_SMALL_FAST_MODEL`).
+- **Two LLMs**: a large LLM for the real work, a small LLM for Claude Code's quick requests (`ANTHROPIC_SMALL_FAST_MODEL`). Internally the config keys still use `big` and `small`.
 - **PDF**: the proxy converts `document` blocks into extracted text or rasterized pages (`text`/`image`/`hybrid`).
 - **Vision**: with the `mmproj-*.gguf` projector next to the GGUF, screenshots and images just work.
 - **Right-sized context**: Claude Code's auto-compact window is aligned to the model's real context (`CLAUDE_CODE_AUTO_COMPACT_WINDOW`), preventing Metal out-of-memory crashes.
@@ -81,9 +81,9 @@ The ones used and tested by the author (Hugging Face links):
 
 | Role | Model | Link |
 |---|---|---|
-| **big** | Qwen3.6-35B-A3B (MoE, Q4_K_XL) + mmproj for vision | [unsloth/Qwen3.6-35B-A3B-GGUF](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF) |
-| big (alternative) | Qwen3.6-27B with MTP (native speculative decoding) | [unsloth/Qwen3.6-27B-MTP-GGUF](https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF) |
-| **small** | history-9b (Q4_K_M) | [ghost-actual/Qwen3.6-9B-Heretic-History-Q4_K_M-GGUF](https://huggingface.co/ghost-actual/Qwen3.6-9B-Heretic-History-Q4_K_M-GGUF) |
+| **Large LLM** | Qwen3.6-35B-A3B (MoE, Q4_K_XL) + mmproj for vision | [unsloth/Qwen3.6-35B-A3B-GGUF](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF) |
+| Large LLM (alternative) | Qwen3.6-27B with MTP (native speculative decoding) | [unsloth/Qwen3.6-27B-MTP-GGUF](https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF) |
+| **Small LLM** | history-9b (Q4_K_M) | [ghost-actual/Qwen3.6-9B-Heretic-History-Q4_K_M-GGUF](https://huggingface.co/ghost-actual/Qwen3.6-9B-Heretic-History-Q4_K_M-GGUF) |
 
 Download the `.gguf` files (and the optional `mmproj-*.gguf` into the big model's folder) and set the paths in `~/.ccllrun/config.json`. Any chat-instruct GGUF works; if the filename contains `MTP`, ccllrun enables speculative decoding by itself.
 
@@ -172,7 +172,7 @@ The app is **not distributed pre-built**: you compile it yourself with `make`. T
 - **LaTeX math** in replies through vendored MathJax (`$...$`, `$$...$$`, `\(...\)`, `\[...\]`), rendered offline as SVG.
 - **Slash commands** with autocomplete: `/context`, `/memory`, `/compact`, `/cost`, `/init`, plus the project's custom commands.
 - **Status**: Start/Stop toggle + Restart, server health cards, setup doctor with remedies.
-- **Config**: graphical (or raw JSON) editor for `~/.ccllrun/config.json`. After changing server parameters: Restart.
+- **Config**: graphical (or raw JSON) editor for `~/.ccllrun/config.json`, with Basic/Advanced sections, localized labels/tooltips (`it`, `en`, `es`, `fr`, `de`, `pt`) and explicit units for token/slot values. After changing server parameters: Restart.
 - **Live logs** for big/small/proxy.
 - **Info** page with version 0.1, author email, copyright and MIT license.
 
@@ -184,16 +184,16 @@ Precedence (weakest to strongest): **built-in defaults → `~/.ccllrun/config.js
 
 | Key | Env | CLI | Default | Description |
 |---|---|---|---|---|
-| `big_gguf` | `ccllrun_GGUF_BIG` | `--big-gguf` | Qwen3.6-35B-A3B Q4_K_XL | main model |
-| `small_gguf` | `ccllrun_GGUF_SMALL` | `--small-gguf` | history-9b Q4_K_M | fast model (`""` to disable) |
+| `big_gguf` | `ccllrun_GGUF_BIG` | `--big-gguf` | Qwen3.6-35B-A3B Q4_K_XL | large LLM file |
+| `small_gguf` | `ccllrun_GGUF_SMALL` | `--small-gguf` | history-9b Q4_K_M | small LLM file (`""` to disable) |
 | `backend` | `ccllrun_BACKEND` | `--backend` | `llama.cpp` | runtime backend (`llama.cpp` for GGUF, `mlx-lm` for MLX directories) |
-| `big_mlx` | `ccllrun_MLX_BIG` | `--big-mlx` | `""` | main MLX model directory |
-| `small_mlx` | `ccllrun_MLX_SMALL` | `--small-mlx` | `""` | fast MLX model directory |
-| `no_small` | — | `--no-small` | `false` | don't start the small model |
-| `model_big` | `ccllrun_MODEL_BIG` | — | `qwen-big` | API alias of the big model |
-| `model_small` | `ccllrun_MODEL_SMALL` | — | `small-fast` | API alias of the small model |
-| `ctx_big` | `ccllrun_CTX_BIG` | `--ctx` | 98304 | big context (**divided by `parallel`**) |
-| `ctx_small` | — | — | 32768 | small context (**divided by `parallel_small`**) |
+| `big_mlx` | `ccllrun_MLX_BIG` | `--big-mlx` | `""` | large LLM MLX directory |
+| `small_mlx` | `ccllrun_MLX_SMALL` | `--small-mlx` | `""` | small LLM MLX directory |
+| `no_small` | — | `--no-small` | `false` | don't start the small LLM |
+| `model_big` | `ccllrun_MODEL_BIG` | — | `qwen-big` | API alias of the large LLM |
+| `model_small` | `ccllrun_MODEL_SMALL` | — | `small-fast` | API alias of the small LLM |
+| `ctx_big` | `ccllrun_CTX_BIG` | `--ctx` | 98304 | large LLM context, in tokens (**divided by `parallel`**) |
+| `ctx_small` | — | — | 32768 | small LLM context, in tokens (**divided by `parallel_small`**) |
 | `batch` | — | — | 2048 | big-model batch size (`-b`/`-ub`) |
 | `batch_small` | — | `--batch-small` | `""` (= `batch`) | small-model batch size; lower it to ease KV-cache pressure on the small model |
 | `ubatch` | — | `--ubatch` | `""` (= `batch`) | big-model prefill micro-batch (`-ub`); lower it to cut peak prefill memory |
@@ -221,6 +221,7 @@ Precedence (weakest to strongest): **built-in defaults → `~/.ccllrun/config.js
 | `cc_tool_search` | — | — | `false` | enable Claude Code tool search (faster prefill with many MCP servers; startup option) |
 | `studio_markdown` | — | — | `true` | markdown rendering in Studio's chat |
 | `studio_autostart` | — | — | `true` | Studio starts the stack on launch |
+| `studio_lan_enabled` | — | — | `false` | expose Studio on the LAN on the next launch; use only on trusted networks |
 
 The reasoning behind these knobs — big/small split, the context/memory/cache distinction, prompt-cache stability and `cc_auto_compact_window` — is explained in **Design notes** below.
 
@@ -230,7 +231,7 @@ The reasoning behind these knobs — big/small split, the context/memory/cache d
 
 The config table above is a flat list; this section explains the reasoning behind each family of options, so you can tune them with intent instead of trial and error.
 
-**Two models, two budgets.** Claude Code talks to two endpoints: the *big* model does the real reasoning and coding, while a *small* model handles its frequent throwaway calls (conversation titles, cheap sub-tasks). They have very different load profiles, so they get **independent limits**: `ctx`, `batch`, `ubatch`, `parallel` and `cache_reuse` all exist in a big and a `*_small` variant. The `*_small` keys fall back to the big value when empty, so nothing breaks if you ignore them. *Why it matters:* before this split the small model silently inherited the big model's settings — including a `parallel` slot count that divided its smaller `ctx_small` into pieces too small for real prompts, which surfaced as `Context size has been exceeded` in `llama-small.log`. Setting `parallel_small: 1` gives every small-model request the full context. The benefit is a small model that stops crashing under load, without sacrificing throughput on the big one.
+**Two LLMs, two budgets.** Claude Code talks to two endpoints: the *large LLM* does the real reasoning and coding, while a *small LLM* handles its frequent throwaway calls (conversation titles, cheap sub-tasks). The code and config still call them `big` and `small`, but the user-facing UI now uses "large LLM" and "small LLM" to make the roles explicit. They have very different load profiles, so they get **independent limits**: `ctx`, `batch`, `ubatch`, `parallel` and `cache_reuse` all exist in a big and a `*_small` variant. The `*_small` keys fall back to the big value when empty, so nothing breaks if you ignore them. *Why it matters:* before this split the small LLM silently inherited the large LLM's settings — including a `parallel` slot count that divided its smaller `ctx_small` into pieces too small for real prompts, which surfaced as `Context size has been exceeded` in `llama-small.log`. Setting `parallel_small: 1` gives every small-LLM request the full context. The benefit is a small LLM that stops crashing under load, without sacrificing throughput on the large one.
 
 **Context vs. memory vs. cache — three independent knobs.** These look similar but solve different problems, and conflating them is the usual cause of mis-tuning:
 - `ctx_*` is *how much conversation fits*. With `parallel > 1` llama-server splits it across slots, so the effective per-request context is `ctx / parallel`.

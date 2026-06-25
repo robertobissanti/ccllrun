@@ -1,0 +1,185 @@
+{
+  "ui": {
+    "language": "Language",
+    "basic": "Basic",
+    "advanced": "Advanced",
+    "pickGguf": "Select GGUF file",
+    "pickDir": "Select folder"
+  },
+  "fields": {
+    "backend": [
+      "Backend",
+      "Engine used to run local models. Use llama.cpp with GGUF files; use mlx-lm with MLX folders."
+    ],
+    "big_gguf": [
+      "Large LLM GGUF",
+      "Main model file, used for reasoning, coding, and heavier chats."
+    ],
+    "small_gguf": [
+      "Small LLM GGUF",
+      "Light model file for quick requests. Leave it empty if you do not want a small LLM LLM."
+    ],
+    "big_mlx": [
+      "Large LLM MLX",
+      "Main MLX model folder. Select the folder, not a single file."
+    ],
+    "small_mlx": [
+      "Small LLM MLX",
+      "Light MLX model folder. Optional."
+    ],
+    "no_small": [
+      "Disable small LLM",
+      "Start only the large LLM to use less memory."
+    ],
+    "model_big": [
+      "Large LLM alias",
+      "API name for the large LLM. Claude Code and local apps use this name."
+    ],
+    "model_small": [
+      "Small LLM alias",
+      "API name for the small LLM LLM. It distinguishes small LLM from large LLM."
+    ],
+    "ctx_big": [
+      "Large LLM context",
+      "Maximum conversation memory for the large LLM. With parallel slots, it is divided."
+    ],
+    "ctx_small": [
+      "Small LLM context",
+      "Maximum conversation memory for the small LLM LLM. Increase only if small LLM runs out of context."
+    ],
+    "kv_type": [
+      "KV cache",
+      "Internal model memory format. q8_0 uses less memory; f16 is more conservative but heavier."
+    ],
+    "ngl": [
+      "GPU layers",
+      "How many model layers to place on the GPU. On Apple Silicon, 99 usually means all."
+    ],
+    "parallel": [
+      "Large LLM parallel slots",
+      "How many requests large LLM can handle at once. More than 1 increases parallelism but splits context."
+    ],
+    "parallel_small": [
+      "Small LLM parallel slots",
+      "How many requests the small LLM can handle at once."
+    ],
+    "batch": [
+      "Large LLM batch size",
+      "Tokens processed together during large LLM prefill. Higher can be faster, but uses more memory."
+    ],
+    "batch_small": [
+      "Small LLM batch size",
+      "Small batch. Empty uses the large LLM value; lower uses less memory."
+    ],
+    "ubatch": [
+      "Large LLM prefill micro-batch",
+      "Big sub-batch during prefill. Lower it if memory spikes. It must stay below batch."
+    ],
+    "ubatch_small": [
+      "Small LLM prefill micro-batch",
+      "Small sub-batch. Empty uses small LLM batch. It must stay below small LLM batch."
+    ],
+    "cache_reuse": [
+      "Large LLM cache reuse",
+      "Reuses already computed prompt parts. Change it only when measuring cache problems."
+    ],
+    "cache_reuse_small": [
+      "Small LLM cache reuse",
+      "Small cache reuse. Empty uses the large LLM value."
+    ],
+    "reasoning_budget": [
+      "Reasoning budget",
+      "Maximum tokens the model may use for internal reasoning before answering."
+    ],
+    "presence_penalty": [
+      "Presence penalty",
+      "Reduces repetitions. Too high can make code worse."
+    ],
+    "pdf_mode": [
+      "PDF mode",
+      "How to read PDFs: hybrid tries text and images; text uses text only; image uses images."
+    ],
+    "mmproj": [
+      "mmproj (vision)",
+      "Projector file for vision models. Empty tries autodetect; off disables vision."
+    ],
+    "embed_gguf": [
+      "GGUF embedding",
+      "Model for semantic search. Do not put it in large LLM or small LLM: it belongs in the embedding slot."
+    ],
+    "model_embed": [
+      "Embedding alias",
+      "API name for the embedding model."
+    ],
+    "embed_batch": [
+      "Embedding batch",
+      "Tokens processed together by the embedding slot. It must cover the longest chunks."
+    ],
+    "embed_port": [
+      "Embedding port",
+      "Local port for the embedding slot."
+    ],
+    "proxy_port": [
+      "Proxy port",
+      "Local port for the Claude Code compatible proxy."
+    ],
+    "big_port": [
+      "Big port",
+      "Local port for the large LLM server."
+    ],
+    "small_port": [
+      "Small port",
+      "Local port for the small LLM LLM server."
+    ],
+    "llama_bin": [
+      "llama-server binary",
+      "Command or path for the llama-server binary."
+    ],
+    "mlx_bin": [
+      "mlx-lm binary",
+      "Command or path for the MLX server, for example mlx_lm.server."
+    ],
+    "extra_big_flags": [
+      "Extra flags (big)",
+      "Extra options passed to the large LLM server. Use only if you know what each flag does."
+    ],
+    "cc_auto_compact_window": [
+      "Auto-compact window",
+      "When the chat reaches about this many tokens, Claude Code compacts older messages."
+    ],
+    "cc_max_output_tokens": [
+      "Maximum output",
+      "Maximum number of tokens Claude Code can generate in one answer."
+    ],
+    "cc_tool_search": [
+      "Tool search",
+      "Loads tools only when needed. It can speed startup with many MCPs; applies from the next chat."
+    ],
+    "kb_dir": [
+      "Knowledge base",
+      "Global folder added to Claude Code. Empty means disabled."
+    ],
+    "studio_markdown": [
+      "Markdown in chat",
+      "Shows answers with headings, lists, code, and tables. Off shows raw text."
+    ],
+    "studio_autostart": [
+      "Automatic stack start",
+      "Starts large LLM, small LLM, and proxy automatically when Studio opens."
+    ],
+    "studio_lan_enabled": [
+      "LAN access",
+      "Exposes Studio on the local network the next time it opens. Use only on trusted networks."
+    ]
+  },
+  "sect": {
+    "Modelli": "Models",
+    "Contesto e memoria": "Context and memory",
+    "Inferenza": "Inference",
+    "PDF e visione": "PDF and vision",
+    "Embedding (RAG)": "Embedding (RAG)",
+    "Rete e avanzate": "Network and advanced",
+    "Claude Code": "Claude Code",
+    "Studio": "Studio"
+  }
+}

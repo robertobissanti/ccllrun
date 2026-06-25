@@ -26,6 +26,8 @@
   "embed_port": 8003,
   "embed_gguf": "",
   "model_embed": "embed",
+  "embed_batch": 8192,
+  "kb_dir": "",
   "llama_bin": "llama-server",
   "mlx_bin": "mlx_lm.server",
   "model_big": "qwen-big",

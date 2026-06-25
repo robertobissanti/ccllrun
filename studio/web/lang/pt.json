@@ -1,0 +1,185 @@
+{
+  "ui": {
+    "language": "Idioma",
+    "basic": "Básico",
+    "advanced": "Avançado",
+    "pickGguf": "Selecionar arquivo GGUF",
+    "pickDir": "Selecionar pasta"
+  },
+  "fields": {
+    "backend": [
+      "Backend",
+      "Motor que executa os modelos locais. Use llama.cpp com arquivos GGUF; use mlx-lm com pastas MLX."
+    ],
+    "big_gguf": [
+      "GGUF LLM grande",
+      "Arquivo do LLM grande, usado para raciocínio, código e chats pesados."
+    ],
+    "small_gguf": [
+      "GGUF LLM pequeno",
+      "Arquivo do LLM pequeno para pedidos rápidos. Deixe vazio se não quiser iniciar LLM pequeno."
+    ],
+    "big_mlx": [
+      "MLX LLM grande",
+      "Pasta do modelo MLX principal. Selecione a pasta, não um arquivo único."
+    ],
+    "small_mlx": [
+      "MLX LLM pequeno",
+      "Pasta do modelo MLX leve. Opcional."
+    ],
+    "no_small": [
+      "Desativar LLM pequeno",
+      "Inicia apenas o LLM grande para usar menos memória."
+    ],
+    "model_big": [
+      "Alias LLM grande",
+      "Nome API do LLM grande. Claude Code e apps locais usam este nome."
+    ],
+    "model_small": [
+      "Alias LLM pequeno",
+      "Nome API do LLM pequeno. Serve para distingui-lo do LLM grande."
+    ],
+    "ctx_big": [
+      "Contexto LLM grande",
+      "Memória máxima de conversa do LLM grande. Com slots paralelos, ela é dividida."
+    ],
+    "ctx_small": [
+      "Contexto LLM pequeno",
+      "Memória máxima de conversa do LLM pequeno. Aumente apenas se o LLM pequeno ficar sem contexto."
+    ],
+    "kv_type": [
+      "KV cache",
+      "Formato da memória interna do modelo. q8_0 usa menos memória; f16 é mais conservador, mas mais pesado."
+    ],
+    "ngl": [
+      "Camadas na GPU",
+      "Quantas camadas do modelo colocar na GPU. No Apple Silicon, 99 geralmente significa todas."
+    ],
+    "parallel": [
+      "Slots paralelos LLM grande",
+      "Quantos pedidos o LLM grande pode processar ao mesmo tempo. Mais de 1 aumenta paralelismo, mas divide o contexto."
+    ],
+    "parallel_small": [
+      "Slots paralelos LLM pequeno",
+      "Quantos pedidos o LLM pequeno pode processar ao mesmo tempo. Vazio usa o valor do LLM grande."
+    ],
+    "batch": [
+      "Batch size LLM grande",
+      "Tokens processados juntos no prefill do LLM grande. Mais alto pode ser mais rápido, mas usa mais memória."
+    ],
+    "batch_small": [
+      "Batch size LLM pequeno",
+      "Batch do LLM pequeno. Vazio usa o valor do LLM grande; mais baixo reduz memória."
+    ],
+    "ubatch": [
+      "Micro-batch prefill LLM grande",
+      "Sub-batch do LLM grande durante o prefill. Reduza se houver picos de memória. Deve ficar abaixo do batch."
+    ],
+    "ubatch_small": [
+      "Micro-batch prefill LLM pequeno",
+      "Sub-batch do LLM pequeno. Vazio usa batch LLM pequeno. Deve ficar abaixo do batch LLM pequeno."
+    ],
+    "cache_reuse": [
+      "Cache reuse LLM grande",
+      "Reutiliza partes já calculadas do prompt. Altere apenas se estiver medindo problemas de cache."
+    ],
+    "cache_reuse_small": [
+      "Cache reuse LLM pequeno",
+      "Cache reuse do LLM pequeno. Vazio usa o valor do LLM grande."
+    ],
+    "reasoning_budget": [
+      "Budget reasoning",
+      "Tokens máximos que o modelo pode usar para raciocínio interno antes da resposta."
+    ],
+    "presence_penalty": [
+      "Presence penalty",
+      "Reduz repetições. Valores altos demais podem piorar o código."
+    ],
+    "pdf_mode": [
+      "Modo PDF",
+      "Como ler PDFs: hybrid tenta texto e imagens; text usa só texto; image usa imagens."
+    ],
+    "mmproj": [
+      "mmproj (visão)",
+      "Arquivo projector para modelos com visão. Vazio tenta autodetect; off desativa a visão."
+    ],
+    "embed_gguf": [
+      "GGUF embedding",
+      "Modelo para busca semântica. Não coloque em LLM grande ou LLM pequeno: ele pertence ao slot embedding."
+    ],
+    "model_embed": [
+      "Alias embedding",
+      "Nome API do modelo embedding."
+    ],
+    "embed_batch": [
+      "Batch embedding",
+      "Tokens processados juntos pelo slot embedding. Deve cobrir os chunks mais longos."
+    ],
+    "embed_port": [
+      "Porta embedding",
+      "Porta local do slot embedding."
+    ],
+    "proxy_port": [
+      "Porta proxy",
+      "Porta local do proxy compatível com Claude Code."
+    ],
+    "big_port": [
+      "Porta big",
+      "Porta local do servidor do LLM grande."
+    ],
+    "small_port": [
+      "Porta small",
+      "Porta local do servidor do LLM pequeno."
+    ],
+    "llama_bin": [
+      "Binário llama-server",
+      "Comando ou caminho do binário llama-server."
+    ],
+    "mlx_bin": [
+      "Binário mlx-lm",
+      "Comando ou caminho do servidor MLX, por exemplo mlx_lm.server."
+    ],
+    "extra_big_flags": [
+      "Flags extra (big)",
+      "Opções adicionais passadas ao servidor LLM grande. Use apenas se souber o que cada flag faz."
+    ],
+    "cc_auto_compact_window": [
+      "Janela auto-compact",
+      "Quando o chat passa aproximadamente deste número de tokens, Claude Code compacta mensagens antigas."
+    ],
+    "cc_max_output_tokens": [
+      "Saída máxima",
+      "Número máximo de tokens que o Claude Code pode gerar em uma resposta."
+    ],
+    "cc_tool_search": [
+      "Tool search",
+      "Carrega ferramentas só quando necessário. Pode acelerar o início com muitos MCPs; vale a partir do próximo chat."
+    ],
+    "kb_dir": [
+      "Knowledge base",
+      "Pasta global adicionada ao Claude Code. Vazio significa desativada."
+    ],
+    "studio_markdown": [
+      "Markdown no chat",
+      "Mostra respostas com títulos, listas, código e tabelas. Desligado mostra texto bruto."
+    ],
+    "studio_autostart": [
+      "Início automático do stack",
+      "Inicia LLM grande, LLM pequeno e proxy automaticamente ao abrir o Studio."
+    ],
+    "studio_lan_enabled": [
+      "Acesso LAN",
+      "Expõe o Studio na rede local na próxima abertura. Use apenas em redes confiáveis."
+    ]
+  },
+  "sect": {
+    "Modelli": "Modelos",
+    "Contesto e memoria": "Contexto e memória",
+    "Inferenza": "Inferência",
+    "PDF e visione": "PDF e visão",
+    "Embedding (RAG)": "Embedding (RAG)",
+    "Rete e avanzate": "Rede e avançado",
+    "Claude Code": "Claude Code",
+    "Studio": "Studio"
+  }
+}

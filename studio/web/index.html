@@ -537,25 +537,60 @@
   #cfgText:focus { border-color: var(--accent); }
   #cfgMsg { font-size: 12px; margin-left: 10px; }
   /* form di configurazione */
-  .fsect { font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .8px;
-           margin: 22px 0 4px; padding-bottom: 5px; border-bottom: 1px solid var(--border); }
-  .frow { display: flex; align-items: center; gap: 14px; padding: 9px 2px; }
-  .frow .fl { width: 175px; flex-shrink: 0; font-size: 13px; }
-  .frow .fd { color: var(--dim); font-size: 11.5px; flex: 1; min-width: 140px; }
+  .cfgBlockTitle { margin: 22px 0 12px; font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .8px; }
+  .cfgAcc { border-top: 1px solid var(--border); margin-top: 26px; padding-top: 8px; }
+  .cfgAcc summary { cursor: pointer; user-select: none; list-style: none; display: inline-flex; align-items: center;
+                    gap: 10px; padding: 12px 0; color: var(--text); font-weight: 700; font-size: 15px; }
+  .cfgAcc summary::-webkit-details-marker { display: none; }
+  .cfgAcc summary::before { content: "›"; color: var(--accent); font-size: 24px; line-height: 1; font-weight: 800; }
+  .cfgAcc[open] summary::before { content: "⌄"; transform: translateY(-1px); }
+  .fsect { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .8px;
+           margin: 26px 0 10px; padding-bottom: 7px; border-bottom: 1px solid var(--border); }
+  .frow { display: grid; grid-template-columns: minmax(180px, 250px) minmax(220px, 720px);
+          align-items: center; column-gap: 22px; row-gap: 6px; padding: 10px 2px; }
+  .frow .fl { min-width: 0; font-size: 15px; display: inline-flex; align-items: center; gap: 7px; }
+  .helpIcon { position: relative; width: 17px; height: 17px; border: 1px solid color-mix(in srgb, var(--accent) 82%, white 18%); border-radius: 50%;
+              display: inline-flex; align-items: center; justify-content: center; color: color-mix(in srgb, var(--accent) 86%, white 14%);
+              background: color-mix(in srgb, var(--accent) 13%, transparent); font: 700 10px/1 var(--mono); cursor: help; padding: 0; }
+  .helpIcon:hover, .helpIcon:focus { color: var(--text); border-color: var(--accent); outline: none; }
+  .helpIcon::after { content: attr(data-tip); position: absolute; z-index: 80; left: calc(100% + 9px); top: 50%;
+                     width: min(320px, 70vw); transform: translateY(-50%) translateX(-2px); opacity: 0; pointer-events: none;
+                     background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px;
+                     box-shadow: 0 10px 26px rgba(0,0,0,.38); padding: 9px 11px; font: 15px/1.45 var(--sans);
+                     text-align: left; white-space: normal; transition: opacity .04s ease, transform .04s ease; }
+  .helpIcon::before { content: ""; position: absolute; z-index: 81; left: calc(100% + 5px); top: 50%;
+                      width: 8px; height: 8px; transform: translateY(-50%) rotate(45deg); opacity: 0; pointer-events: none;
+                      background: var(--panel); border-left: 1px solid var(--border); border-bottom: 1px solid var(--border);
+                      transition: opacity .04s ease; }
+  .helpIcon:hover::after, .helpIcon:focus::after { opacity: 1; transform: translateY(-50%) translateX(0); }
+  .helpIcon:hover::before, .helpIcon:focus::before { opacity: 1; }
   .frow input[type=text], .frow input[type=number] {
     background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px;
     padding: 7px 10px; font: 12.5px var(--mono); outline: none; }
-  .frow input[type=text] { flex: 2; min-width: 220px; }
-  .frow .pathCtl { flex: 2; min-width: 220px; display: flex; gap: 7px; }
+  .frow input[type=text] { width: 100%; min-width: 0; }
+  .frow .pathCtl { width: 100%; min-width: 0; display: flex; gap: 7px; }
   .frow .pathCtl input[type=text] { flex: 1; min-width: 0; }
   .frow .pickPath { width: 36px; flex: 0 0 36px; padding: 0; display: inline-flex;
                     align-items: center; justify-content: center; }
   .frow .pickPath svg { width: 17px; height: 17px; }
   .frow input[type=number] { width: 90px; }
   .frow input:focus, .frow select:focus { border-color: var(--accent); }
-  .frow select { min-width: 110px; }
-  .frow input[type=range] { flex: 1; max-width: 280px; accent-color: var(--accent); }
-  .frow .rv { font: 12px var(--mono); color: var(--text); min-width: 58px; text-align: right; }
+  .frow select { min-width: 92px; max-width: 180px; }
+  .selectCtl, .numCtl { display: inline-flex; align-items: center; gap: 8px; }
+  .unitHint { color: var(--text); font: 13px var(--mono); white-space: nowrap; }
+  .cfgLangRow { display: flex; align-items: center; gap: 10px; margin: 4px 0 18px; }
+  .cfgLangRow label { font-size: 13px; color: var(--text); font-weight: 700; }
+  .cfgLangRow select { min-width: 170px; }
+  .frow.gapBefore { margin-top: 18px; }
+  .rangeCtl { display: grid; grid-template-columns: minmax(180px, 360px) auto; align-items: center; gap: 10px; width: 100%; }
+  .frow input[type=range] { width: 100%; accent-color: var(--accent); }
+  .rangeVal { display: inline-flex; align-items: baseline; gap: 8px; min-width: 82px; }
+  .frow .rv { font: 13px var(--mono); color: var(--text); min-width: 42px; text-align: left; }
+  @media (max-width: 760px) {
+    .frow { grid-template-columns: 1fr auto; }
+    .frow .fl { grid-column: 1; }
+    .frow > :not(.fl) { grid-column: 1 / -1; }
+  }
   /* switch */
   .sw { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
   .sw input { opacity: 0; width: 0; height: 0; }
@@ -2419,46 +2454,47 @@ $("#btnRestart").onclick = () => {
 };
 
 /* ============ CONFIG ============ */
-/* Schema dei parametri di ccllrun: tipo di controllo, range e spiegazioni.
-   I default rispecchiano quelli dello script. */
+/* ccllrun config schema: control type, ranges, and help text.
+   Defaults mirror the script. */
 const fmtK = v => v >= 1024 ? Math.round(v / 1024) + "k" : v;
 const CFG_SCHEMA = [
   { sect: "Modelli" },
-  { k: "backend", t: "select", opts: ["llama.cpp", "mlx-lm"], l: "Backend", d: "llama.cpp usa GGUF; mlx-lm usa cartelle MLX", def: "llama.cpp" },
-  { k: "big_gguf", t: "text", pick: "gguf", l: "GGUF big", d: "path del modello principale", def: "" },
-  { k: "small_gguf", t: "text", pick: "gguf", l: "GGUF small", d: "modello rapido (vuoto = nessuno)", def: "" },
-  { k: "big_mlx", t: "text", pick: "mlx", l: "MLX big", d: "cartella modello MLX, non file .safetensors", def: "" },
-  { k: "small_mlx", t: "text", pick: "mlx", l: "MLX small", d: "cartella modello MLX (opzionale)", def: "" },
-  { k: "no_small", t: "switch", l: "Disattiva small", d: "non avviare il modello piccolo", def: false },
-  { k: "model_big", t: "text", l: "Alias big", d: "nome esposto dall'API", def: "qwen-big" },
-  { k: "model_small", t: "text", l: "Alias small", d: "", def: "small-fast" },
+  { k: "backend", t: "select", opts: ["llama.cpp", "mlx-lm"], l: "Backend", d: "Scegli il motore locale: llama.cpp usa file GGUF; mlx-lm usa cartelle MLX.", def: "llama.cpp" },
+  { k: "big_gguf", t: "text", pick: "gguf", l: "GGUF big", d: "Modello principale usato per ragionare, scrivere codice e rispondere alle chat.", def: "" },
+  { k: "small_gguf", t: "text", pick: "gguf", l: "GGUF small", d: "Modello leggero usato per operazioni rapide. Puoi lasciarlo vuoto se non vuoi avviarlo.", def: "" },
+  { k: "big_mlx", t: "text", pick: "mlx", l: "MLX big", d: "Cartella del modello MLX principale. Non selezionare un singolo file .safetensors.", def: "" },
+  { k: "small_mlx", t: "text", pick: "mlx", l: "MLX small", d: "Cartella del modello MLX leggero. Opzionale.", def: "" },
+  { k: "no_small", t: "switch", l: "Disattiva small", d: "Avvia solo il modello principale. Utile se vuoi risparmiare memoria.", def: false },
+  { k: "model_big", t: "text", l: "Alias big", d: "Nome con cui il modello principale viene esposto all'API locale.", def: "qwen-big" },
+  { k: "model_small", t: "text", l: "Alias small", d: "Nome con cui il modello leggero viene esposto all'API locale.", def: "small-fast" },
   { sect: "Contesto e memoria" },
   { k: "ctx_big", t: "range", min: 8192, max: 262144, step: 4096, l: "Contesto big",
-    d: "totale: viene diviso per gli slot paralleli", def: 98304, fmt: fmtK },
-  { k: "ctx_small", t: "range", min: 4096, max: 65536, step: 4096, l: "Contesto small", d: "", def: 32768, fmt: fmtK },
+    d: "Quanta conversazione può ricordare il modello principale. Se usi più slot paralleli, questo valore viene diviso tra gli slot.", def: 98304, fmt: fmtK, unit: "token" },
+  { k: "ctx_small", t: "range", min: 4096, max: 65536, step: 4096, l: "Contesto small",
+    d: "Quanta conversazione può ricordare il modello leggero. Aumentalo se il modello small segnala contesto insufficiente.", def: 32768, fmt: fmtK, unit: "token" },
   { k: "kv_type", t: "select", opts: ["q8_0", "f16", "q4_0"], l: "KV cache",
-    d: "q8_0 = metà memoria con perdita trascurabile", def: "q8_0" },
-  { k: "ngl", t: "range", min: 0, max: 99, step: 1, l: "Layer su GPU", d: "99 = tutti (consigliato su Apple Silicon)", def: 99 },
+    d: "Tipo di memoria interna del modello. q8_0 consuma meno memoria; f16 usa più memoria ma è più conservativo.", def: "q8_0" },
+  { k: "ngl", t: "range", min: 0, max: 99, step: 1, l: "Layer su GPU", d: "Quanti layer caricare sulla GPU. Su Apple Silicon di solito 99 significa tutti.", def: 99 },
   { sect: "Inferenza" },
   { k: "parallel", t: "range", min: 1, max: 4, step: 1, l: "Slot paralleli (big)",
-    d: "attenzione: >1 divide il contesto per slot", def: 1 },
-  { k: "parallel_small", t: "select", opts: ["", 1, 2, 3, 4], l: "Slot paralleli (small)",
-    d: "vuoto = come il big; meno slot = più contesto per richiesta sul small", def: "" },
-  { k: "batch", t: "select", opts: [512, 1024, 2048, 4096], l: "Batch size (big)", d: "-b di llama-server", def: 2048 },
+    d: "Quante richieste può gestire insieme il modello principale. Valori oltre 1 dividono il contesto disponibile.", def: 1, unit: "slot" },
+  { k: "parallel_small", t: "range", min: 1, max: 4, step: 1, l: "Slot paralleli (small)",
+    d: "Quante richieste può gestire insieme il modello leggero.", def: 1, unit: "slot" },
+  { k: "batch", t: "select", opts: [512, 1024, 2048, 4096], l: "Batch size (big)", d: "Dimensione del batch di prefill del modello principale. Più alto può essere più veloce ma usa più memoria.", def: 2048, unit: "token", gapBefore: true },
   { k: "batch_small", t: "select", opts: ["", 512, 1024, 2048, 4096], l: "Batch size (small)",
-    d: "vuoto = come il big; valore minore allevia la pressione sulla KV cache del small", def: "" },
+    d: "Batch del modello leggero. Vuoto significa usa il valore del big; più basso riduce il consumo di memoria.", def: "", unit: "token" },
   { k: "ubatch", t: "select", opts: ["", 256, 512, 1024, 2048], l: "Micro-batch prefill (big)",
-    d: "-ub; vuoto = come batch. Più piccolo = meno memoria di picco nel prefill. Deve essere ≤ batch", def: "" },
+    d: "Sotto-batch usato durante il prefill del big. Più basso riduce i picchi di memoria. Deve essere minore o uguale al batch.", def: "", unit: "token", gapBefore: true },
   { k: "ubatch_small", t: "select", opts: ["", 256, 512, 1024, 2048], l: "Micro-batch prefill (small)",
-    d: "vuoto = come batch del small. Deve essere ≤ batch del small (non eredita quello del big)", def: "" },
+    d: "Sotto-batch del modello leggero. Vuoto significa usa il batch small. Deve essere minore o uguale al batch small.", def: "", unit: "token" },
   { k: "cache_reuse", t: "select", opts: [0, 128, 256, 512, 1024], l: "Cache reuse (big)",
-    d: "gap minimo per riusare la KV cache attorno a un buco; alzalo solo se vedi cache-miss su chat compattate", def: 256 },
+    d: "Aiuta a riusare parti già calcolate del prompt. Di solito 256 va bene; cambia solo se stai misurando cache miss.", def: 256, unit: "token", gapBefore: true },
   { k: "cache_reuse_small", t: "select", opts: ["", 0, 128, 256, 512, 1024], l: "Cache reuse (small)",
-    d: "vuoto = come il big", def: "" },
+    d: "Cache reuse del modello leggero. Vuoto significa usa lo stesso valore del big.", def: "", unit: "token" },
   { k: "reasoning_budget", t: "range", min: 0, max: 16384, step: 512, l: "Budget reasoning",
-    d: "token massimi di ragionamento", def: 4096, fmt: fmtK },
+    d: "Numero massimo di token che il modello può usare per ragionare prima della risposta.", def: 4096, fmt: fmtK, gapBefore: true },
   { k: "presence_penalty", t: "range", min: 0, max: 2, step: 0.1, l: "Presence penalty",
-    d: "alto = meno ripetizioni ma codice peggiore", def: 1.5 },
+    d: "Riduce le ripetizioni. Valori troppo alti possono peggiorare il codice.", def: 1.5 },
   { sect: "PDF e visione" },
   { k: "pdf_mode", t: "select", opts: ["hybrid", "text", "image"], l: "Modalità PDF",
     d: "hybrid: testo se basta, altrimenti immagini", def: "hybrid" },
@@ -2466,6 +2502,8 @@ const CFG_SCHEMA = [
   { sect: "Embedding (RAG)" },
   { k: "embed_gguf", t: "text", l: "GGUF embedding", d: "vuoto = nessuno slot. Un modello di embedding qui abilita /v1/embeddings via proxy (ricerca semantica). NON metterlo in big/small: manda la chat in loop", def: "" },
   { k: "model_embed", t: "text", l: "Alias embedding", d: "", def: "embed" },
+  { k: "embed_batch", t: "select", opts: [1024, 2048, 4096, 8192, 16384], l: "Batch embedding",
+    d: "batch fisico e context dello slot embedding; deve coprire i chunk piu' lunghi", def: 8192 },
   { k: "embed_port", t: "num", l: "Porta embedding", d: "", def: 8003 },
   { sect: "Rete e avanzate" },
   { k: "proxy_port", t: "num", l: "Porta proxy", d: "", def: 8765 },
@@ -2476,10 +2514,13 @@ const CFG_SCHEMA = [
   { k: "extra_big_flags", t: "text", l: "Flag extra (big)", d: "passati così come sono, es. --mlock --kv-unified", def: "" },
   { sect: "Claude Code" },
   { k: "cc_auto_compact_window", t: "num", l: "Auto-compact window",
-    d: "soglia di compattazione (tienila sotto ctx_big per evitare l'OOM Metal)", def: 115000 },
-  { k: "cc_max_output_tokens", t: "num", l: "Output massimo", d: "token massimi di output di Claude Code", def: 32000 },
+    d: "Quando la chat supera circa questo numero di token, Claude Code compatta i messaggi vecchi per liberare contesto.", def: 115000, unit: "token" },
+  { k: "cc_max_output_tokens", t: "num", l: "Output massimo",
+    d: "Numero massimo di token che Claude Code può generare in una risposta.", def: 32000, unit: "token" },
   { k: "cc_tool_search", t: "switch", l: "Tool search",
     d: "prefill più veloce con molti MCP (carica i tool on-demand); il proxy ora inoltra i blocchi tool_reference. Vale dalla prossima chat: è un'opzione d'avvio", def: false },
+  { k: "kb_dir", t: "text", pick: "dir", l: "Knowledge base",
+    d: "cartella globale aggiunta a Claude Code con --add-dir; vuoto = disattivata", def: "" },
   { sect: "Studio" },
   { k: "studio_markdown", t: "switch", l: "Markdown in chat",
     d: "renderizza le risposte come markdown (titoli, liste, codice, tabelle); spento = testo grezzo", def: true },
@@ -2491,36 +2532,112 @@ const CFG_SCHEMA = [
 
 let cfgJsonMode = false;
 
+const CFG_BASIC_SECTIONS = new Set(["Modelli", "Studio"]);
+const CFG_LANGS = [
+  ["it", "Italiano"],
+  ["en", "English"],
+  ["es", "Español"],
+  ["fr", "Français"],
+  ["de", "Deutsch"],
+  ["pt", "Português"],
+];
+let cfgLang = localStorage.getItem("ccllrun.cfgLang") || "it";
+if (!CFG_LANGS.some(([code]) => code === cfgLang)) cfgLang = "it";
+let cfgI18n = null;
+
+const CFG_I18N_FALLBACK = {
+  ui: { language: "Lingua", basic: "Base", advanced: "Avanzate", pickGguf: "Seleziona file GGUF", pickDir: "Seleziona cartella" },
+  sect: {},
+  fields: {}
+};
+
+async function loadCfgLanguage(lang = cfgLang) {
+  try {
+    const res = await fetch("/lang/" + encodeURIComponent(lang) + ".json", { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    cfgI18n = await res.json();
+    cfgLang = lang;
+  } catch (e) {
+    cfgI18n = CFG_I18N_FALLBACK;
+    cfgLang = "it";
+  }
+  localStorage.setItem("ccllrun.cfgLang", cfgLang);
+}
+
+function cfgText(path, fallback = "") {
+  let node = cfgI18n || CFG_I18N_FALLBACK;
+  for (const part of path.split(".")) node = node && node[part];
+  return node || fallback;
+}
+
+function localizeCfgField(f) {
+  if (!f.k) return f;
+  const pair = cfgText("fields." + f.k, null);
+  return { ...f, l: pair?.[0] || f.l, d: pair?.[1] || f.d };
+}
+
+function cfgFieldHtml(f, cfg) {
+  f = localizeCfgField(f);
+  const v = cfg[f.k] ?? f.def;
+  const id = "cf_" + f.k;
+  let ctl = "";
+  if (f.t === "text") {
+    const input = `<input type="text" id="${id}" value="${esc(String(v))}">`;
+    const pickTitle = f.pick === "gguf" ? cfgText("ui.pickGguf", "Seleziona file GGUF") : cfgText("ui.pickDir", "Seleziona cartella");
+    ctl = f.pick
+      ? `<span class="pathCtl">${input}<button type="button" class="pickPath" data-pick="${f.pick}" data-target="${id}" title="${pickTitle}">${ICON_FOLDER}</button></span>`
+      : input;
+  }
+  else if (f.t === "num")
+    ctl = `<span class="numCtl"><input type="number" id="${id}" value="${esc(String(v))}">${f.unit ? `<span class="unitHint">${esc(f.unit)}</span>` : ""}</span>`;
+  else if (f.t === "switch")
+    ctl = `<label class="sw"><input type="checkbox" id="${id}" ${v ? "checked" : ""}><span class="tk"></span></label>`;
+  else if (f.t === "select")
+    ctl = `<span class="selectCtl"><select id="${id}">${f.opts.map(o => `<option ${String(o) === String(v) ? "selected" : ""}>${o}</option>`).join("")}</select>${f.unit ? `<span class="unitHint">${esc(f.unit)}</span>` : ""}</span>`;
+  else if (f.t === "range") {
+    const fmt = f.fmt || (x => x);
+    ctl = `<span class="rangeCtl"><input type="range" id="${id}" min="${f.min}" max="${f.max}" step="${f.step}" value="${v}">
+           <span class="rangeVal"><span class="rv">${fmt(v)}</span>${f.unit ? `<span class="unitHint">${esc(f.unit)}</span>` : ""}</span></span>`;
+  }
+  const help = f.d ? `<button type="button" class="helpIcon" data-tip="${esc(f.d)}" aria-label="${esc(f.d)}">?</button>` : "";
+  return `<div class="frow ${f.gapBefore ? "gapBefore" : ""}" data-cfg-row="${esc(f.k || "")}"><span class="fl">${esc(f.l)}${help}</span>${ctl}</div>`;
+}
+
 function renderCfgForm(cfg) {
-  $("#cfgForm").innerHTML = CFG_SCHEMA.map(f => {
-    if (f.sect) return `<div class="fsect">${esc(f.sect)}</div>`;
-    const v = cfg[f.k] ?? f.def;
-    const id = "cf_" + f.k;
-    let ctl = "";
-    if (f.t === "text") {
-      const input = `<input type="text" id="${id}" value="${esc(String(v))}">`;
-      ctl = f.pick
-        ? `<span class="pathCtl">${input}<button type="button" class="pickPath" data-pick="${f.pick}" data-target="${id}" title="Seleziona ${f.pick === "mlx" ? "cartella MLX" : "file GGUF"}">${ICON_FOLDER}</button></span>`
-        : input;
+  const basic = [];
+  const advanced = [];
+  let current = "";
+  for (const f of CFG_SCHEMA) {
+    if (f.sect) { current = f.sect; continue; }
+    const row = cfgFieldHtml(f, cfg);
+    if (CFG_BASIC_SECTIONS.has(current)) {
+      if (!basic.some(x => x.sect === current)) basic.push({ sect: current, rows: [] });
+      basic[basic.length - 1].rows.push(row);
+    } else {
+      if (!advanced.some(x => x.sect === current)) advanced.push({ sect: current, rows: [] });
+      advanced[advanced.length - 1].rows.push(row);
     }
-    else if (f.t === "num") ctl = `<input type="number" id="${id}" value="${esc(String(v))}">`;
-    else if (f.t === "switch")
-      ctl = `<label class="sw"><input type="checkbox" id="${id}" ${v ? "checked" : ""}><span class="tk"></span></label>`;
-    else if (f.t === "select")
-      ctl = `<select id="${id}">${f.opts.map(o => `<option ${String(o) === String(v) ? "selected" : ""}>${o}</option>`).join("")}</select>`;
-    else if (f.t === "range") {
-      const fmt = f.fmt || (x => x);
-      ctl = `<input type="range" id="${id}" min="${f.min}" max="${f.max}" step="${f.step}" value="${v}">
-             <span class="rv">${fmt(v)}</span>`;
-    }
-    return `<div class="frow" data-cfg-row="${esc(f.k || "")}"><span class="fl">${esc(f.l)}</span>${ctl}<span class="fd">${esc(f.d || "")}</span></div>`;
-  }).join("");
+  }
+  const langOptions = CFG_LANGS.map(([code, name]) => `<option value="${esc(code)}" ${code === cfgLang ? "selected" : ""}>${esc(name)}</option>`).join("");
+  $("#cfgForm").innerHTML = `
+    <div class="cfgLangRow"><label for="cfgLang">${esc(cfgText("ui.language", "Lingua"))}</label><select id="cfgLang">${langOptions}</select></div>
+    <div class="cfgBlockTitle">${esc(cfgText("ui.basic", "Basic"))}</div>
+    ${basic.map(g => `<div class="fsect">${esc(cfgText("sect." + g.sect, g.sect))}</div>${g.rows.join("")}`).join("")}
+    <details class="cfgAcc">
+      <summary>${esc(cfgText("ui.advanced", "Advanced"))}</summary>
+      ${advanced.map(g => `<div class="fsect">${esc(cfgText("sect." + g.sect, g.sect))}</div>${g.rows.join("")}`).join("")}
+    </details>`;
+  $("#cfgLang").addEventListener("change", async e => {
+    const currentCfg = collectCfgForm();
+    await loadCfgLanguage(e.target.value);
+    renderCfgForm(currentCfg);
+  });
   // gli slider aggiornano il valore mostrato accanto
   for (const f of CFG_SCHEMA) {
     if (f.sect || f.t !== "range") continue;
     const el = $("#cf_" + f.k);
     const fmt = f.fmt || (x => x);
-    el.addEventListener("input", () => { el.nextElementSibling.textContent = fmt(Number(el.value)); });
+    el.addEventListener("input", () => { el.nextElementSibling.querySelector(".rv").textContent = fmt(Number(el.value)); });
   }
   validateCfgForm();
   for (const k of ["backend", "big_gguf", "small_gguf", "big_mlx", "small_mlx"]) {
@@ -2530,8 +2647,9 @@ function renderCfgForm(cfg) {
   }
   $("#cfgForm").querySelectorAll(".pickPath").forEach(btn => btn.onclick = async () => {
     let path = "";
-    if (window.ds4PickModel) path = await window.ds4PickModel(btn.dataset.pick);
-    else path = prompt(btn.dataset.pick === "mlx" ? "Percorso della cartella MLX:" : "Percorso del file GGUF:") || "";
+    if (btn.dataset.pick === "dir" && window.ds4PickDirectory) path = await window.ds4PickDirectory();
+    else if (window.ds4PickModel) path = await window.ds4PickModel(btn.dataset.pick);
+    else path = prompt(btn.dataset.pick === "gguf" ? "Percorso del file GGUF:" : "Percorso della cartella:") || "";
     if (!path) return;
     const input = $("#" + btn.dataset.target);
     input.value = path;
@@ -2625,6 +2743,7 @@ function cfgIsDirty() {
 }
 
 async function loadConfig() {
+  await loadCfgLanguage(cfgLang);
   const j = await (await fetch("/api/config")).json();
   $("#cfgText").value = j.text;
   let cfg = {};

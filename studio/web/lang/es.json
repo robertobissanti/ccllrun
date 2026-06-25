@@ -1,0 +1,185 @@
+{
+  "ui": {
+    "language": "Idioma",
+    "basic": "Básico",
+    "advanced": "Avanzado",
+    "pickGguf": "Seleccionar archivo GGUF",
+    "pickDir": "Seleccionar carpeta"
+  },
+  "fields": {
+    "backend": [
+      "Backend",
+      "Motor que ejecuta los modelos locales. Usa llama.cpp con archivos GGUF; usa mlx-lm con carpetas MLX."
+    ],
+    "big_gguf": [
+      "GGUF LLM grande",
+      "Archivo del LLM grande, usado para razonar, programar y gestionar chats pesados."
+    ],
+    "small_gguf": [
+      "GGUF LLM pequeño",
+      "Archivo del LLM pequeño para peticiones rápidas. Déjalo vacío si no quieres iniciar LLM pequeño."
+    ],
+    "big_mlx": [
+      "MLX LLM grande",
+      "Carpeta del modelo MLX principal. Selecciona la carpeta, no un archivo individual."
+    ],
+    "small_mlx": [
+      "MLX LLM pequeño",
+      "Carpeta del modelo MLX ligero. Opcional."
+    ],
+    "no_small": [
+      "Desactivar LLM pequeño",
+      "Inicia solo el LLM grande para usar menos memoria."
+    ],
+    "model_big": [
+      "Alias LLM grande",
+      "Nombre API del LLM grande. Claude Code y las apps locales usan este nombre."
+    ],
+    "model_small": [
+      "Alias LLM pequeño",
+      "Nombre API del LLM pequeño. Sirve para distinguirlo de LLM grande."
+    ],
+    "ctx_big": [
+      "Contexto LLM grande",
+      "Memoria máxima de conversación del LLM grande. Con slots paralelos, se divide."
+    ],
+    "ctx_small": [
+      "Contexto LLM pequeño",
+      "Memoria máxima de conversación del LLM pequeño. Súbela solo si LLM pequeño se queda sin contexto."
+    ],
+    "kv_type": [
+      "KV cache",
+      "Formato de memoria interna del modelo. q8_0 usa menos memoria; f16 es más conservador pero más pesado."
+    ],
+    "ngl": [
+      "Capas en GPU",
+      "Cuántas capas del modelo poner en GPU. En Apple Silicon, 99 normalmente significa todas."
+    ],
+    "parallel": [
+      "Slots paralelos LLM grande",
+      "Cuántas peticiones puede gestionar LLM grande a la vez. Más de 1 aumenta el paralelismo pero divide el contexto."
+    ],
+    "parallel_small": [
+      "Slots paralelos LLM pequeño",
+      "Cuántas peticiones puede gestionar LLM pequeño a la vez. Vacío usa el mismo valor de LLM grande."
+    ],
+    "batch": [
+      "Batch size LLM grande",
+      "Tokens procesados juntos en el prefill de LLM grande. Más alto puede ser más rápido, pero usa más memoria."
+    ],
+    "batch_small": [
+      "Batch size LLM pequeño",
+      "Batch de LLM pequeño. Vacío usa el valor de LLM grande; más bajo reduce la memoria."
+    ],
+    "ubatch": [
+      "Micro-batch prefill LLM grande",
+      "Sub-batch de LLM grande durante el prefill. Redúcelo si hay picos de memoria. Debe estar por debajo de batch."
+    ],
+    "ubatch_small": [
+      "Micro-batch prefill LLM pequeño",
+      "Sub-batch de LLM pequeño. Vacío usa batch LLM pequeño. Debe estar por debajo de batch LLM pequeño."
+    ],
+    "cache_reuse": [
+      "Cache reuse LLM grande",
+      "Reutiliza partes del prompt ya calculadas. Cámbialo solo si estás midiendo problemas de caché."
+    ],
+    "cache_reuse_small": [
+      "Cache reuse LLM pequeño",
+      "Cache reuse de LLM pequeño. Vacío usa el mismo valor de LLM grande."
+    ],
+    "reasoning_budget": [
+      "Presupuesto de razonamiento",
+      "Tokens máximos que el modelo puede usar para razonamiento interno antes de responder."
+    ],
+    "presence_penalty": [
+      "Presence penalty",
+      "Reduce repeticiones. Valores demasiado altos pueden empeorar el código."
+    ],
+    "pdf_mode": [
+      "Modo PDF",
+      "Cómo leer PDFs: hybrid prueba texto e imágenes; text usa solo texto; image usa imágenes."
+    ],
+    "mmproj": [
+      "mmproj (visión)",
+      "Archivo projector para modelos con visión. Vacío intenta autodetección; off desactiva la visión."
+    ],
+    "embed_gguf": [
+      "GGUF embedding",
+      "Modelo para búsqueda semántica. No lo pongas en LLM grande ni LLM pequeño: va en el slot embedding."
+    ],
+    "model_embed": [
+      "Alias embedding",
+      "Nombre API del modelo embedding."
+    ],
+    "embed_batch": [
+      "Batch embedding",
+      "Tokens procesados juntos por el slot embedding. Debe cubrir los chunks más largos."
+    ],
+    "embed_port": [
+      "Puerto embedding",
+      "Puerto local del slot embedding."
+    ],
+    "proxy_port": [
+      "Puerto proxy",
+      "Puerto local del proxy compatible con Claude Code."
+    ],
+    "big_port": [
+      "Puerto big",
+      "Puerto local del servidor del LLM grande."
+    ],
+    "small_port": [
+      "Puerto small",
+      "Puerto local del servidor del LLM pequeño."
+    ],
+    "llama_bin": [
+      "Binario llama-server",
+      "Comando o ruta del binario llama-server."
+    ],
+    "mlx_bin": [
+      "Binario mlx-lm",
+      "Comando o ruta del servidor MLX, por ejemplo mlx_lm.server."
+    ],
+    "extra_big_flags": [
+      "Flags extra (big)",
+      "Opciones adicionales pasadas al servidor LLM grande. Úsalas solo si sabes qué hace cada flag."
+    ],
+    "cc_auto_compact_window": [
+      "Ventana auto-compact",
+      "Cuando el chat supera aproximadamente este número de tokens, Claude Code compacta los mensajes antiguos."
+    ],
+    "cc_max_output_tokens": [
+      "Salida máxima",
+      "Número máximo de tokens que Claude Code puede generar en una respuesta."
+    ],
+    "cc_tool_search": [
+      "Tool search",
+      "Carga herramientas solo cuando hacen falta. Puede acelerar el inicio con muchos MCP; vale desde el próximo chat."
+    ],
+    "kb_dir": [
+      "Knowledge base",
+      "Carpeta global añadida a Claude Code. Vacío significa desactivada."
+    ],
+    "studio_markdown": [
+      "Markdown en chat",
+      "Muestra respuestas con títulos, listas, código y tablas. Apagado muestra texto sin formato."
+    ],
+    "studio_autostart": [
+      "Inicio automático stack",
+      "Inicia LLM grande, LLM pequeño y proxy automáticamente al abrir Studio."
+    ],
+    "studio_lan_enabled": [
+      "Acceso LAN",
+      "Expone Studio en la red local en la próxima apertura. Úsalo solo en redes confiables."
+    ]
+  },
+  "sect": {
+    "Modelli": "Modelos",
+    "Contesto e memoria": "Contexto y memoria",
+    "Inferenza": "Inferencia",
+    "PDF e visione": "PDF y visión",
+    "Embedding (RAG)": "Embedding (RAG)",
+    "Rete e avanzate": "Red y avanzado",
+    "Claude Code": "Claude Code",
+    "Studio": "Studio"
+  }
+}

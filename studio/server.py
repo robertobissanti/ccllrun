@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""ccllrun Studio — dashboard web per lo stack ccllrun (llama-server + proxy + Claude Code).
+"""ccllrun Studio — web dashboard for the ccllrun stack.
 
-Ispirato a DStudio di Giuseppe Perrotta (https://github.com/sk8erboi17/DStudio, BSD-3).
+Inspired by Giuseppe Perrotta's DStudio (https://github.com/sk8erboi17/DStudio, BSD-3).
 
-Server locale che:
-  - serve la single-page UI (web/index.html)
-  - espone /api/status (setup doctor + salute dei server)
-  - avvia/ferma lo stack via lo script `ccllrun` (sottocomandi `servers` / `stop`)
-  - legge/scrive ~/.ccllrun/config.json
-  - mostra i log (~/.ccllrun/*.log)
-  - reverse-proxy /v1 verso il llama-server big (chat dalla UI, accesso LAN
-    senza mai esporre l'engine: come DStudio, l'engine resta su 127.0.0.1)
+Local server responsibilities:
+  - serve the single-page UI (web/index.html)
+  - expose /api/status (setup doctor + server health)
+  - start/stop the stack through the `ccllrun` script (`servers` / `stop`)
+  - read/write ~/.ccllrun/config.json
+  - expose ~/.ccllrun/*.log
+  - reverse-proxy /v1 to the big llama-server for UI chat and optional LAN
+    access, while keeping the engine itself bound to 127.0.0.1
 
 Env:
-  STUDIO_PORT  porta della dashboard (default 8770)
-  STUDIO_HOST  host di bind (default 127.0.0.1; 0.0.0.0 per la LAN)
-  CCLLRUN_BIN  path dello script ccllrun (default: ../ccllrun rispetto a questo file)
+  STUDIO_PORT  dashboard port (default 8770)
+  STUDIO_HOST  bind host (default 127.0.0.1; use 0.0.0.0 for LAN)
+  CCLLRUN_BIN  ccllrun script path (default: ../ccllrun relative to this file)
 """
 
 import asyncio
@@ -42,9 +42,8 @@ HERE = Path(__file__).resolve().parent
 CC_DIR = Path.home() / ".ccllrun"
 CONFIG_FILE = CC_DIR / "config.json"
 
-# Lanciata dal Finder la .app eredita solo /usr/bin:/bin: arricchiamo il PATH
-# del PROCESSO prima di risolvere qualsiasi binario (doctor compreso); i
-# sottoprocessi lo ereditano.
+# Finder-launched apps inherit only /usr/bin:/bin. Extend the process PATH before
+# resolving any binary; subprocesses inherit it.
 os.environ["PATH"] = ":".join(
     ["/opt/homebrew/bin", "/usr/local/bin",
      str(Path.home() / "bin"), str(Path.home() / ".local/bin"),
@@ -59,7 +58,8 @@ def _find_bin(env_var, name, extra):
     return name
 
 
-# nel bundle .app lo script è in Resources/ (accanto a server.py); in repo è in ../
+# In the .app bundle the script lives in Resources/ next to server.py; in the
+# repository it lives one directory above studio/.
 CCLLRUN_BIN = _find_bin("CCLLRUN_BIN", "ccllrun",
                         [str(HERE / "ccllrun"), str(HERE.parent / "ccllrun"), str(Path.home() / "bin/ccllrun")])
 CLAUDE_BIN = _find_bin("CLAUDE_BIN", "claude",
@@ -71,6 +71,7 @@ STUDIO_PARENT_PID = int(os.environ.get("STUDIO_PARENT_PID", "0") or 0)
 DEFAULTS = {
     "big_port": 8001, "small_port": 8002, "proxy_port": 8765,
     "embed_port": 8003, "embed_gguf": "", "model_embed": "embed",
+    "embed_batch": 8192, "kb_dir": "",
     "backend": "llama.cpp",
     "model_big": "qwen-big", "model_small": "small-fast",
     "big_gguf": str(Path.home() / ".lmstudio/models/unsloth/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"),
@@ -91,7 +92,7 @@ DOWNLOAD_SEQ = 0
 
 
 def aug_env():
-    """Ambiente per i sottoprocessi (il PATH è già arricchito a livello processo)."""
+    """Return the subprocess environment; PATH is already extended globally."""
     return os.environ.copy()
 
 
@@ -1087,6 +1088,13 @@ def gguf_is_embedding(path):
 def validate_model_config(cfg):
     errors = []
     backend = str(cfg.get("backend") or "llama.cpp")
+    embed_batch = cfg.get("embed_batch")
+    if embed_batch not in (None, ""):
+        try:
+            if int(embed_batch) <= 0:
+                errors.append("embed_batch deve essere maggiore di 0")
+        except (TypeError, ValueError):
+            errors.append("embed_batch deve essere un numero intero")
     if backend not in {"llama.cpp", "mlx-lm"}:
         errors.append("backend deve essere llama.cpp oppure mlx-lm")
         return errors
@@ -1401,9 +1409,6 @@ async def autostart_stack(app):
     cfg = load_config()
     if not cfg.get("studio_autostart", True) or not Path(CCLLRUN_BIN).is_file():
         return
-    if await http_json(f"http://127.0.0.1:{cfg['proxy_port']}/v1/models") is not None:
-        return                                    # gia' attivo
-
     start_server_action("start", [(("servers",), None)])
 
 
@@ -1451,6 +1456,7 @@ def main():
     app.router.add_get("/", index)
     app.router.add_get("/mark.svg", mark_svg)
     app.router.add_static("/vendor", HERE / "web" / "vendor")
+    app.router.add_static("/lang", HERE / "web" / "lang")
     app.router.add_get("/api/status", api_status)
     app.router.add_post("/api/start", api_start)
     app.router.add_post("/api/stop", api_stop)
