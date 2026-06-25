@@ -118,6 +118,8 @@ Anything ccllrun doesn't recognize is passed through to `claude`.
 | `--no-small` | don't start the small model |
 | `--ctx <n>` | big model context (default 98304) |
 | `--batch-small <n>` | small model batch (default: same as the big model) |
+| `--ubatch <n>` / `--ubatch-small <n>` | prefill micro-batch (`-ub`, default: = batch); lower it to cut peak prefill memory. Must be ≤ batch |
+| `--cache-reuse <n>` / `--cache-reuse-small <n>` | min gap to reuse KV cache around a hole (default 256) |
 | `--kv <type>` | KV cache quantization: `f16` \| `q8_0` \| `q4_0` |
 | `--mmproj <path\|off>` | vision projector (default: autodetect next to the big GGUF) |
 | `--parallel <n>` | big-model parallel slots (**divides the context per slot**) |
@@ -194,6 +196,10 @@ Precedence (weakest to strongest): **built-in defaults → `~/.ccllrun/config.js
 | `ctx_small` | — | — | 32768 | small context (**divided by `parallel_small`**) |
 | `batch` | — | — | 2048 | big-model batch size (`-b`/`-ub`) |
 | `batch_small` | — | `--batch-small` | `""` (= `batch`) | small-model batch size; lower it to ease KV-cache pressure on the small model |
+| `ubatch` | — | `--ubatch` | `""` (= `batch`) | big-model prefill micro-batch (`-ub`); lower it to cut peak prefill memory |
+| `ubatch_small` | — | `--ubatch-small` | `""` (= `batch_small`) | small-model `-ub`; **must be ≤ `batch_small`** (does not inherit `ubatch`) |
+| `cache_reuse` | — | `--cache-reuse` | 256 | min gap to reuse KV cache around a removed/edited block; raise it only if you see cache misses on compacted conversations |
+| `cache_reuse_small` | — | `--cache-reuse-small` | `""` (= `cache_reuse`) | same, for the small model |
 | `kv_type` | `ccllrun_KV_TYPE` | `--kv` | `q8_0` | KV cache quantization (`f16`/`q8_0`/`q4_0`) — `q8_0` halves memory |
 | `ngl` | — | — | 99 | layers offloaded to GPU (99 = all) |
 | `parallel` | — | `--parallel` | 1 | big-model parallel slots (>1 splits the context per slot) |
@@ -213,7 +219,9 @@ Precedence (weakest to strongest): **built-in defaults → `~/.ccllrun/config.js
 | `studio_markdown` | — | — | `true` | markdown rendering in Studio's chat |
 | `studio_autostart` | — | — | `true` | Studio starts the stack on launch |
 
-> **Big vs small limits.** `ctx`/`batch`/`parallel` can be set independently for the two models: `batch_small` and `parallel_small` default to the big-model value when left empty, so existing configs keep working. These flags only apply to the **llama.cpp** backend — `mlx_lm.server` takes no batch/ctx flags (batch is dynamic, context comes from the model), so for MLX the only lever is `ctx_small` plus `cc_auto_compact_window` downstream.
+> **Big vs small limits.** `ctx`/`batch`/`ubatch`/`parallel`/`cache_reuse` can be set independently for the two models; the `*_small` keys default to the big-model value when left empty (except `ubatch_small`, which defaults to `batch_small` to keep `-ub ≤ -b`), so existing configs keep working. These flags only apply to the **llama.cpp** backend — `mlx_lm.server` takes no batch/ctx flags (batch is dynamic, context comes from the model), so for MLX the only lever is `ctx_small` plus `cc_auto_compact_window` downstream.
+
+> **Two different levers, don't confuse them.** `cache_reuse` is about *reuse*: the minimum gap llama-server tolerates to reuse the KV cache around a removed/edited block — it helps latency on conversations whose history gets compacted, and has near-zero effect when the prefix is already byte-identical (see prompt-cache stability below). `ubatch` is about *memory*: a smaller prefill micro-batch lowers peak KV usage during prefill, which is the lever against `failed to find a memory slot` on long prompts / narrow slots — it does **not** change the cache-hit rate.
 
 > **Why `cc_auto_compact_window`?** Claude Code assumes a 200k window for non-Anthropic models. On a local model with a smaller context it would fill past the limit and crash the GPU out of memory: this key makes it compact the conversation *before* hitting the wall.
 
