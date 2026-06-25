@@ -1,0 +1,213 @@
+{
+  "n": 60,
+  "groups": {
+    "poesia_cli": {
+      "n": 10,
+      "seconds_mean": 44.23982941680297,
+      "seconds_median": 42.15888322899991,
+      "seconds_sd": 6.8740737737434205,
+      "seconds_ci95": [
+        39.322754906850015,
+        49.15690392675592
+      ],
+      "input_mean": 18303.4,
+      "output_mean": 954.2,
+      "successes": 4,
+      "success_rate": 0.4,
+      "success_rate_wilson_ci95": [
+        0.16817758120350967,
+        0.6873304525498135
+      ],
+      "timeouts": 0
+    },
+    "poesia_studio": {
+      "n": 10,
+      "seconds_mean": 53.59020037489827,
+      "seconds_median": 51.34301122899342,
+      "seconds_sd": 16.116760791319034,
+      "seconds_ci95": [
+        42.06176523172286,
+        65.11863551807367
+      ],
+      "input_mean": 18627.8,
+      "output_mean": 1558.3,
+      "successes": 6,
+      "success_rate": 0.6,
+      "success_rate_wilson_ci95": [
+        0.3126695474501864,
+        0.8318224187964902
+      ],
+      "timeouts": 0
+    },
+    "python_cli": {
+      "n": 10,
+      "seconds_mean": 37.23650369580137,
+      "seconds_median": 33.8897830414935,
+      "seconds_sd": 9.255779273253319,
+      "seconds_ci95": [
+        30.6157780777403,
+        43.85722931386243
+      ],
+      "input_mean": 18745.6,
+      "output_mean": 577.4,
+      "successes": 10,
+      "success_rate": 1.0,
+      "success_rate_wilson_ci95": [
+        0.7224598312333834,
+        1.0
+      ],
+      "timeouts": 0
+    },
+    "python_studio": {
+      "n": 10,
+      "seconds_mean": 41.951866749904,
+      "seconds_median": 42.63852510401921,
+      "seconds_sd": 4.896440076226118,
+      "seconds_ci95": [
+        38.449407876057435,
+        45.45432562375056
+      ],
+      "input_mean": 19134.1,
+      "output_mean": 951,
+      "successes": 10,
+      "success_rate": 1.0,
+      "success_rate_wilson_ci95": [
+        0.7224598312333834,
+        1.0
+      ],
+      "timeouts": 0
+    },
+    "c_cli": {
+      "n": 10,
+      "seconds_mean": 101.21787971669691,
+      "seconds_median": 84.91275793749082,
+      "seconds_sd": 49.47806783741577,
+      "seconds_ci95": [
+        65.82586121751326,
+        136.60989821588055
+      ],
+      "input_mean": 18573.5,
+      "output_mean": 2619.6,
+      "successes": 3,
+      "success_rate": 0.3,
+      "success_rate_wilson_ci95": [
+        0.10778928748621183,
+        0.6032267800204347
+      ],
+      "timeouts": 1
+    },
+    "c_studio": {
+      "n": 10,
+      "seconds_mean": 90.23920177519321,
+      "seconds_median": 87.3467802709929,
+      "seconds_sd": 38.53451015562547,
+      "seconds_ci95": [
+        62.67518895306057,
+        117.80321459732585
+      ],
+      "input_mean": 20658.4,
+      "output_mean": 3029.6,
+      "successes": 6,
+      "success_rate": 0.6,
+      "success_rate_wilson_ci95": [
+        0.3126695474501864,
+        0.8318224187964902
+      ],
+      "timeouts": 0
+    }
+  },
+  "paired_effects": {
+    "poesia": {
+      "seconds": {
+        "studio_minus_cli_mean": 9.3503709580953,
+        "ci95": [
+          -4.157140376617253,
+          22.857882292807854
+        ],
+        "exact_sign_flip_p_two_sided": 0.162109375
+      },
+      "input_tokens": {
+        "studio_minus_cli_mean": 324.4,
+        "ci95": [
+          -262.76901713615655,
+          911.5690171361565
+        ],
+        "exact_sign_flip_p_two_sided": 0.259765625
+      },
+      "output_tokens": {
+        "studio_minus_cli_mean": 604.1,
+        "ci95": [
+          38.35189292049779,
+          1169.8481070795024
+        ],
+        "exact_sign_flip_p_two_sided": 0.041015625
+      }
+    },
+    "python": {
+      "seconds": {
+        "studio_minus_cli_mean": 4.715363054102636,
+        "ci95": [
+          -3.2727927003552226,
+          12.703518808560496
+        ],
+        "exact_sign_flip_p_two_sided": 0.22265625
+      },
+      "input_tokens": {
+        "studio_minus_cli_mean": 388.5,
+        "ci95": [
+          -58.05852901607426,
+          835.0585290160743
+        ],
+        "exact_sign_flip_p_two_sided": 0.08203125
+      },
+      "output_tokens": {
+        "studio_minus_cli_mean": 373.6,
+        "ci95": [
+          82.69096994861098,
+          664.5090300513891
+        ],
+        "exact_sign_flip_p_two_sided": 0.0234375
+      }
+    },
+    "c": {
+      "seconds": {
+        "studio_minus_cli_mean": -10.978677941503701,
+        "ci95": [
+          -64.60152666638638,
+          42.64417078337898
+        ],
+        "exact_sign_flip_p_two_sided": 0.64453125
+      },
+      "input_tokens": {
+        "studio_minus_cli_mean": 2084.9,
+        "ci95": [
+          -2450.598533060554,
+          6620.398533060554
+        ],
+        "exact_sign_flip_p_two_sided": 0.3984375
+      },
+      "output_tokens": {
+        "studio_minus_cli_mean": 410,
+        "ci95": [
+          -1509.083134400592,
+          2329.083134400592
+        ],
+        "exact_sign_flip_p_two_sided": 0.63671875
+      }
+    }
+  },
+  "paired_similarity": {
+    "poesia": {
+      "sequence_ratio": 0.12989734848943585,
+      "word_jaccard": 0.2561220219765539
+    },
+    "python": {
+      "sequence_ratio": 0.6329537351686325,
+      "word_jaccard": 0.7202490701633005
+    },
+    "c": {
+      "sequence_ratio": 0.33078699151720453,
+      "word_jaccard": 0.4525753139095274
+    }
+  }
+}

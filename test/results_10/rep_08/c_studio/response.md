@@ -1,0 +1,1 @@
+Spiegazione: la funzione scarta spazi iniziali/finali, legge un segno opzionale, poi accumula cifra per cifra verificando overflow/underflow prima della moltiplicazione per 10. Se dopo i digit restano caratteri non-spazio, rifiuta. Restituisce 1 solo se l'intera stringa è un int32_t valido.

@@ -1,0 +1,1 @@
+`merge_intervals` normalizza ogni coppia con `(min, max)`, rimuove i duplicati con un set, poi ordina e scansiona in un solo passaggio: se l'intervallo corrente si sovrappone o è adiacente a quello precedente (`start <= prev_end + 1`), fonde i due; altrimenti aggiunge un nuovo intervallo. Complessità O(n log n) per l'ordinamento, O(n) spazio.

@@ -1,0 +1,3 @@
+Done. `solution.c` is ready.
+
+**Spiegazione:** La funzione scarta spazi iniziali/finali, legge un segno opzionale, poi accumula le cifre in un `int64_t` per evitare overflow durante il parsing. Dopo aver consumato tutti i digit, verifica che non ci siano caratteri residui e che il valore rientri in `[-2^31, 2^31-1]`. Usa solo `stdint.h` e C11, senza `strtol`/`strtoll`. Restituisce `1` in caso di successo, `0` altrimenti, e non modifica `*out` in errore.

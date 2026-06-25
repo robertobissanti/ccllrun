@@ -1,0 +1,3 @@
+File created and all edge cases verified.
+
+**Spiegazione:** La funzione scarta spazi iniziali, legge un segno opzionale, poi accumula le cifre in un `int64_t` per evitare overflow durante la moltiplicazione. Dopo aver consumato le cifre, scarta spazi finali e rifiuta qualsiasi carattere residuo. Solo se il valore rientra in `[INT32_MIN, INT32_MAX]` scrive `*out` e restituisce 1. Nulla viene modificato in caso di errore.

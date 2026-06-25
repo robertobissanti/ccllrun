@@ -1,0 +1,3 @@
+**Spiegazione (≤60 parole):**
+
+La funzione normalizza ogni coppia con `sorted()` per gestire coppie invertite, ordina per estremo sinistro, poi scansiona unendo intervalli sovrapposti (`start ≤ ultimo_end`) o adiacenti (`start ≤ ultimo_end + 1`). Restituisce una lista di tuple ordinata. Gestisce lista vuota, duplicati e valori negativi senza modificare l'input originale. Complessità: O(n log n) per l'ordinamento.

@@ -117,9 +117,11 @@ Anything ccllrun doesn't recognize is passed through to `claude`.
 | `--small-gguf <path>` | small model (`""` to disable) |
 | `--no-small` | don't start the small model |
 | `--ctx <n>` | big model context (default 98304) |
+| `--batch-small <n>` | small model batch (default: same as the big model) |
 | `--kv <type>` | KV cache quantization: `f16` \| `q8_0` \| `q4_0` |
 | `--mmproj <path\|off>` | vision projector (default: autodetect next to the big GGUF) |
-| `--parallel <n>` | llama-server parallel slots (**divides the context per slot**) |
+| `--parallel <n>` | big-model parallel slots (**divides the context per slot**) |
+| `--parallel-small <n>` | small-model parallel slots (default: same as the big model) |
 | `--pdf-mode <m>` | `text` \| `image` \| `hybrid` |
 | `--port <n>` | proxy port (default 8765) |
 | `--tool-search` / `--no-tool-search` | enable/disable tool search (overrides global `settings.json`) |
@@ -189,11 +191,13 @@ Precedence (weakest to strongest): **built-in defaults → `~/.ccllrun/config.js
 | `model_big` | `ccllrun_MODEL_BIG` | — | `qwen-big` | API alias of the big model |
 | `model_small` | `ccllrun_MODEL_SMALL` | — | `small-fast` | API alias of the small model |
 | `ctx_big` | `ccllrun_CTX_BIG` | `--ctx` | 98304 | big context (**divided by `parallel`**) |
-| `ctx_small` | — | — | 32768 | small context |
-| `batch` | — | — | 2048 | batch size (`-b`/`-ub`) |
+| `ctx_small` | — | — | 32768 | small context (**divided by `parallel_small`**) |
+| `batch` | — | — | 2048 | big-model batch size (`-b`/`-ub`) |
+| `batch_small` | — | `--batch-small` | `""` (= `batch`) | small-model batch size; lower it to ease KV-cache pressure on the small model |
 | `kv_type` | `ccllrun_KV_TYPE` | `--kv` | `q8_0` | KV cache quantization (`f16`/`q8_0`/`q4_0`) — `q8_0` halves memory |
 | `ngl` | — | — | 99 | layers offloaded to GPU (99 = all) |
-| `parallel` | — | `--parallel` | 1 | parallel slots (>1 splits the context per slot) |
+| `parallel` | — | `--parallel` | 1 | big-model parallel slots (>1 splits the context per slot) |
+| `parallel_small` | — | `--parallel-small` | `""` (= `parallel`) | small-model parallel slots; keep it at 1 so each request gets the full `ctx_small` |
 | `reasoning_budget` | — | — | 4096 | max reasoning tokens |
 | `presence_penalty` | — | — | 1.5 | anti-repetition (lower it if code quality degrades) |
 | `mmproj` | `ccllrun_MMPROJ` | `--mmproj` | `""` (autodetect) | vision projector; `"off"` to disable |
@@ -208,6 +212,8 @@ Precedence (weakest to strongest): **built-in defaults → `~/.ccllrun/config.js
 | `cc_tool_search` | — | — | `false` | enable Claude Code tool search (faster prefill with many MCP servers; startup option) |
 | `studio_markdown` | — | — | `true` | markdown rendering in Studio's chat |
 | `studio_autostart` | — | — | `true` | Studio starts the stack on launch |
+
+> **Big vs small limits.** `ctx`/`batch`/`parallel` can be set independently for the two models: `batch_small` and `parallel_small` default to the big-model value when left empty, so existing configs keep working. These flags only apply to the **llama.cpp** backend — `mlx_lm.server` takes no batch/ctx flags (batch is dynamic, context comes from the model), so for MLX the only lever is `ctx_small` plus `cc_auto_compact_window` downstream.
 
 > **Why `cc_auto_compact_window`?** Claude Code assumes a 200k window for non-Anthropic models. On a local model with a smaller context it would fill past the limit and crash the GPU out of memory: this key makes it compact the conversation *before* hitting the wall.
 
@@ -247,7 +253,8 @@ After changing server parameters: `ccllrun stop` and restart (or Studio → Stat
 ## Troubleshooting
 
 - **`image input is not supported … mmproj`** → the projector is missing: download `mmproj-*.gguf` into the big GGUF's folder. Then `ccllrun stop` and restart.
-- **`exceeds the available context size`** → `parallel > 1` splits `ctx_big` across slots: set it back to 1 or raise `ctx_big`.
+- **`exceeds the available context size` / `Context size has been exceeded` / `failed to find a memory slot` in `ccllrun logs big`** → `parallel > 1` splits `ctx_big` across slots: set it back to 1 or raise `ctx_big`.
+- **same errors in `ccllrun logs small`** → the small model splits `ctx_small` across `parallel_small` slots (it inherits `parallel` when unset). Set `parallel_small: 1` so each request gets the full `ctx_small`, and/or lower `batch_small`.
 - **`qwen-big non pronto` / not ready** → check `ccllrun logs big` (usually out of memory: lower `ctx_big` or use `kv_type: q8_0`; or a wrong GGUF path).
 - **`kIOGPUCommandBufferCallbackErrorOutOfMemory` errors** → context too large for memory: lower `ctx_big` and keep `cc_auto_compact_window` below it.
 - **PDFs arrive as `[PDF rimosso]`** → `~/.ccllrun/venv/bin/pip install pymupdf`.

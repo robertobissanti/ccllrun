@@ -1,0 +1,46 @@
+{
+  "cli": {
+    "test": "python",
+    "mode": "cli",
+    "seconds": 38.94513624999672,
+    "returncode": 0,
+    "usage": {
+      "input_tokens": 18952,
+      "output_tokens": 710,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 55185,
+      "total_reported": 74847
+    },
+    "session_id": "7237a1ba-8dda-4bd9-966a-1d41c0ccc996",
+    "response": "La funzione normalizza ogni coppia con `sorted()` (garantisce `(min, max)`), ordina per inizio, poi fonde in un solo passaggio: se l'intervallo corrente sovrappone o tocca l'ultimo (`start <= ultimo_end + 1`), unisce estendendo l'estremo massimo; altrimenti aggiunge un nuovo intervallo. Gestisce lista vuota, duplicati e negativi senza modificare l'input originale.",
+    "accuracy": {
+      "pass": true,
+      "stdout": "PASS\n",
+      "stderr": ""
+    }
+  },
+  "studio": {
+    "test": "python",
+    "mode": "studio",
+    "seconds": 43.76976866699988,
+    "returncode": 0,
+    "usage": {
+      "input_tokens": 19218,
+      "output_tokens": 1119,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 73950,
+      "total_reported": 94287
+    },
+    "session_id": "08f72fe3-5614-425f-94b5-87ad11edd3e9",
+    "response": "Tutti i test passano. Ecco la spiegazione:\n\nLa funzione normalizza ogni coppia con `sorted()` per garantire `(min, max)`, ordina per inizio, poi scansiona in un solo passaggio: se l'intervallo corrente si sovrappone o è adiacente all'ultimo (`start <= ultimo_end + 1`), unisce estendendo l'estremo massimo; altrimenti aggiunge un nuovo intervallo. Complessità O(n log n) per l'ordinamento, O(n) per la scansione.",
+    "accuracy": {
+      "pass": true,
+      "stdout": "PASS\n",
+      "stderr": ""
+    }
+  },
+  "similarity": {
+    "sequence_ratio": 0.1879021879021879,
+    "word_jaccard": 0.53125
+  }
+}

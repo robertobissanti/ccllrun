@@ -7,3 +7,5 @@ node_modules/
 studio/ccllrun Studio.app/
 riassunto.md
 *.bak
+# guida interna per sessioni AI, non pubblicare su GitHub
+CLAUDE.md

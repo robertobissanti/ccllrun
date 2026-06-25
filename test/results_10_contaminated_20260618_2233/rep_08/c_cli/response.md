@@ -1,0 +1,3 @@
+**Spiegazione:**
+
+La funzione scarta spazi iniziali/finali, legge un segno opzionale, poi accumula cifre mantenendo `acc` sempre positivo. Il controllo `acc > limit || (acc == limit && digit > bound)` rileva overflow prima che accada, usando `INT32_MAX/10` e `INT32_MAX%10` come soglie. Per i negativi, `bound` è aumentato di 1 per accettare `-2147483648` (INT32_MIN). Qualsiasi carattere non valido dopo le cifre o una stringa vuota causa il rifiuto.

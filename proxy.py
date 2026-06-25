@@ -197,9 +197,13 @@ def block_text(block):
     if btype == "text":
         return block.get("text", "")
     if btype == "tool_result":
-        return "[tool_result]\n" + str(block.get("content", ""))
+        return "[tool_result]\n" + content_text(block.get("content", ""))
     if btype == "tool_use":
-        return "[tool_use]\n" + json.dumps(block, ensure_ascii=False)
+        # Rendi SOLO nome+input, in forma canonica (chiavi ordinate): l'`id`
+        # Anthropic (toolu_...) e' un riferimento opaco che cambia tra richieste
+        # e, finendo nel prefisso, rompe il prompt-cache di llama.cpp (--cache-reuse).
+        canon = {"name": block.get("name"), "input": block.get("input") or {}}
+        return "[tool_use]\n" + json.dumps(canon, ensure_ascii=False, sort_keys=True)
     if btype == "image":
         return "[image input omitted: upstream OpenAI-compatible MLX server is text-only]"
     return f"[{btype or 'block'} omitted]"
@@ -312,8 +316,14 @@ def extract_text_tool_uses(text):
             block, consumed = decoder.raw_decode(candidate)
         except (TypeError, ValueError, json.JSONDecodeError):
             return text, []
-        if not isinstance(block, dict) or block.get("type") != "tool_use" or not block.get("name"):
+        # accetta sia il formato Anthropic pieno ({type:tool_use,...}) sia la
+        # forma canonica ridotta ({name,input}) che ora mostriamo nel prefisso:
+        # se il modello la imita in output, va comunque recuperata.
+        if not isinstance(block, dict) or not block.get("name"):
             return text, []
+        if block.get("type") not in (None, "tool_use"):
+            return text, []
+        block = {"type": "tool_use", "name": block.get("name"), "input": block.get("input") or {}}
         tool_uses.append(block)
         trailing = candidate[consumed:]
         before_next, next_marker, after_next = trailing.partition("[tool_use]")

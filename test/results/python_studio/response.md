@@ -1,0 +1,3 @@
+Tutti i test passano. Ecco la spiegazione:
+
+La funzione normalizza ogni coppia con `sorted()` per garantire `(min, max)`, ordina per inizio, poi scansiona in un solo passaggio: se l'intervallo corrente si sovrappone o è adiacente all'ultimo (`start <= ultimo_end + 1`), unisce estendendo l'estremo massimo; altrimenti aggiunge un nuovo intervallo. Complessità O(n log n) per l'ordinamento, O(n) per la scansione.

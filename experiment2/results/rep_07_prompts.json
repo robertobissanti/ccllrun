@@ -1,0 +1,19 @@
+{
+  "values": [
+    23,
+    -37,
+    -48,
+    -49,
+    36,
+    -39,
+    48,
+    0,
+    -37
+  ],
+  "label": "R7-283523",
+  "prompts": [
+    "Variabili temporanee di questa conversazione, da usare nei prossimi turni senza strumenti e senza salvarle su file: label=R7-283523; valori=[23, -37, -48, -49, 36, -39, 48, 0, -37]. Rispondi soltanto con JSON valido {\"ack\":true,\"sum\":S}, dove S e la somma.",
+    "Usando i valori originali del turno precedente, rispondi soltanto con JSON valido con chiavi sorted_unique (lista crescente senza duplicati) ed even_count (numero di elementi pari nella lista originale).",
+    "Usando esclusivamente i dati originali memorizzati nei turni precedenti, rispondi soltanto con JSON valido con chiavi label, sum, sorted_unique, even_count e reversed (lista originale in ordine inverso). Nessun markdown o commento."
+  ]
+}

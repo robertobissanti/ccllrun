@@ -1,0 +1,1 @@
+La funzione normalizza ogni coppia con `sorted()` (garantisce `(min, max)`), ordina per inizio, poi fonde in un solo passaggio: se l'intervallo corrente sovrappone o tocca l'ultimo (`start <= ultimo_end + 1`), unisce estendendo l'estremo massimo; altrimenti aggiunge un nuovo intervallo. Gestisce lista vuota, duplicati e negativi senza modificare l'input originale.
