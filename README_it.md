@@ -211,6 +211,9 @@ Precedenza (dal più debole al più forte): **default interni → `~/.ccllrun/co
 | `proxy_port` | `ccllrun_PROXY_PORT` | `--port` | 8765 | porta del proxy |
 | `big_port` | `ccllrun_BIG_PORT` | — | 8001 | porta llama-server big |
 | `small_port` | `ccllrun_SMALL_PORT` | — | 8002 | porta llama-server small |
+| `embed_gguf` | — | — | `""` | GGUF di embedding opzionale; se valorizzato avvia un terzo server che espone `/v1/embeddings` via proxy (ricerca semantica / RAG). Un GGUF non-embedding qui viene solo segnalato, mentre in big/small viene rifiutato |
+| `embed_port` | — | — | 8003 | porta llama-server embedding |
+| `model_embed` | — | — | `embed` | alias API del modello embedding |
 | `llama_bin` | `ccllrun_LLAMA_BIN` | — | `llama-server` | binario llama-server |
 | `extra_big_flags` | — | — | `""` | flag extra per il big, es. `"--mlock --kv-unified"` |
 | `cc_auto_compact_window` | — | — | 115000 | soglia di auto-compact di Claude Code (tienila **sotto `ctx_big`**) |
@@ -243,6 +246,8 @@ La tabella sopra è un elenco piatto; questa sezione spiega il ragionamento diet
 **Documenti e visione.** `pdf_mode` decide come i blocchi `document` raggiungono un modello locale solo-testo: `text` estrae il testo, `image` rasterizza le pagine, `hybrid` estrae il testo e rasterizza solo quando ce n'è troppo poco (`CCRUN_PDF_TEXT_MIN`). Immagini e screenshot funzionano quando un projector `mmproj-*.gguf` sta accanto al GGUF big — senza, l'input visivo viene scartato con un messaggio chiaro invece di fallire.
 
 **Qualità di generazione.** `kv_type` quantizza la KV cache (`q8_0` ne dimezza la memoria con perdita trascurabile — il default che lascia spazio a un contesto più grande); `reasoning_budget` limita i token di ragionamento; `presence_penalty` combatte la ripetizione ma degrada il codice se spinto troppo, perciò è esposto per la taratura per-modello.
+
+**Embedding e la guardia anti-embedding.** I modelli di embedding trasformano il testo in vettori invece di generare testo — non hanno un token di stop, quindi se ne metti uno come `big_gguf`/`small_gguf` non smette mai di generare e va in loop. ccllrun ora **rileva** un GGUF di embedding (dalla chiave di metadata `<arch>.pooling_type`) e si rifiuta di avviare lo slot big/small con esso, con un errore chiaro invece di un loop silenzioso; anche il setup doctor di Studio lo segnala. I modelli di embedding restano utili — ricerca semantica e RAG su normative, datasheet e codice — perciò hanno uno slot dedicato opt-in: imposta `embed_gguf` e ccllrun avvia un terzo server, esposto come `/v1/embeddings` via proxy (una richiesta a quel path restituisce `503` se nessun modello di embedding è configurato). Il vantaggio: lo stesso errore che causava il loop infinito diventa un endpoint di retrieval utilizzabile, su una porta sua, senza toccare la chat.
 
 ### Variabili d'ambiente del proxy
 

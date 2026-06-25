@@ -22,8 +22,11 @@ LLAMA_BIN="llama-server"
 MLX_BIN="mlx_lm.server"
 BIG_PORT=8001
 SMALL_PORT=8002
+EMBED_PORT=8003
 BIG_GGUF="$HOME/.lmstudio/models/unsloth/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"
 SMALL_GGUF="$HOME/.lmstudio/models/ghost-actual/Qwen3.6-9B-Heretic-History-Q4_K_M-GGUF/history-9b-Q4_K_M.gguf"
+EMBED_GGUF=""           # vuoto = nessuno slot embedding; un GGUF di embedding abilita /v1/embeddings
+MODEL_EMBED="embed"     # alias del modello embedding
 BIG_MLX=""
 SMALL_MLX=""
 MODEL_BIG="qwen-big"
@@ -101,7 +104,8 @@ apply_config() {  # apply_config <file>
   [[ -f "$f" ]] || return 0
   for pair in \
     "PORT proxy_port" "BACKEND backend" "LLAMA_BIN llama_bin" "MLX_BIN mlx_bin" "BIG_PORT big_port" \
-    "SMALL_PORT small_port" "BIG_GGUF big_gguf" "SMALL_GGUF small_gguf" "BIG_MLX big_mlx" "SMALL_MLX small_mlx" \
+    "SMALL_PORT small_port" "EMBED_PORT embed_port" "BIG_GGUF big_gguf" "SMALL_GGUF small_gguf" \
+    "EMBED_GGUF embed_gguf" "MODEL_EMBED model_embed" "BIG_MLX big_mlx" "SMALL_MLX small_mlx" \
     "MODEL_BIG model_big" "MODEL_SMALL model_small" "PDF_MODE pdf_mode" \
     "CTX_BIG ctx_big" "CTX_SMALL ctx_small" "BATCH batch" "BATCH_SMALL batch_small" \
     "UBATCH ubatch" "UBATCH_SMALL ubatch_small" "CACHE_REUSE cache_reuse" "CACHE_REUSE_SMALL cache_reuse_small" \
@@ -150,7 +154,7 @@ Opzioni:
 
 Config JSON ($CONFIG_FILE), chiavi: backend, big_gguf, small_gguf, big_mlx, small_mlx, ctx_big, ctx_small,
 batch, batch_small, ubatch, ubatch_small, cache_reuse, cache_reuse_small, kv_type, ngl, parallel, parallel_small, reasoning_budget, presence_penalty, mmproj,
-pdf_mode, proxy_port, big_port, small_port, model_big, model_small,
+pdf_mode, proxy_port, big_port, small_port, embed_port, embed_gguf, model_embed, model_big, model_small,
 no_small, extra_big_flags, llama_bin, mlx_bin, cc_auto_compact_window,
 cc_max_output_tokens, cc_tool_search.
 EOF
@@ -264,6 +268,60 @@ elif not any(p.glob("*.safetensors")):
 PY
 }
 
+# Stampa un motivo se il GGUF e' un modello di EMBEDDING (non sa generare chat:
+# non emette stop -> loop infinito se usato come big/small). Vuoto = ok/generativo.
+# Segnale affidabile: la chiave GGUF "<arch>.pooling_type" esiste solo sugli
+# embedding model. Fallback secondario: "embedding" nel general.name.
+gguf_is_embedding() {  # gguf_is_embedding <path>  -> stampa motivo, vuoto se generativo
+  python3 - "$1" <<'PY' 2>/dev/null
+import struct, sys
+from pathlib import Path
+p = Path(sys.argv[1]).expanduser()
+if not p.is_file():
+    raise SystemExit  # gestito altrove (GGUF non trovato)
+try:
+    with open(p, "rb") as f:
+        if f.read(4) != b"GGUF":
+            raise SystemExit
+        struct.unpack("<I", f.read(4))  # version
+        f.read(8)                       # tensor count
+        n_kv, = struct.unpack("<Q", f.read(8))
+        def rd_str():
+            n, = struct.unpack("<Q", f.read(8)); return f.read(n).decode("utf-8", "replace")
+        def rd_val(t):
+            if t == 0:  return struct.unpack("<B", f.read(1))[0]
+            if t == 1:  return struct.unpack("<b", f.read(1))[0]
+            if t == 2:  return struct.unpack("<H", f.read(2))[0]
+            if t == 3:  return struct.unpack("<h", f.read(2))[0]
+            if t == 4:  return struct.unpack("<I", f.read(4))[0]
+            if t == 5:  return struct.unpack("<i", f.read(4))[0]
+            if t == 6:  return struct.unpack("<f", f.read(4))[0]
+            if t == 7:  return struct.unpack("<?", f.read(1))[0]
+            if t == 8:  return rd_str()
+            if t == 9:
+                et, = struct.unpack("<I", f.read(4)); ln, = struct.unpack("<Q", f.read(8))
+                return [rd_val(et) for _ in range(ln)]
+            if t == 10: return struct.unpack("<Q", f.read(8))[0]
+            if t == 11: return struct.unpack("<q", f.read(8))[0]
+            if t == 12: return struct.unpack("<d", f.read(8))[0]
+            raise ValueError(t)
+        name = ""
+        for _ in range(n_kv):
+            key = rd_str(); t, = struct.unpack("<I", f.read(4)); val = rd_val(t)
+            if key.endswith(".pooling_type"):
+                print("e' un modello di embedding (pooling_type presente), non puo' servire la chat")
+                raise SystemExit
+            if key == "general.name":
+                name = str(val)
+        if "embedding" in name.lower():
+            print("il nome del modello indica un embedding model, non puo' servire la chat")
+except SystemExit:
+    raise
+except Exception:
+    pass  # parsing fallito: non blocchiamo, lasciamo decidere a llama-server
+PY
+}
+
 if [[ "$BACKEND" == "mlx-lm" ]]; then
   BIG_MLX_ISSUE="$(mlx_dir_error "${BIG_MLX:-}")"
   if [[ -n "$BIG_MLX_ISSUE" ]]; then
@@ -320,6 +378,12 @@ else
       echo "[ccllrun] GGUF non trovato: $BIG_GGUF" >&2
       exit 1
     fi
+    BIG_EMB="$(gguf_is_embedding "$BIG_GGUF")"
+    if [[ -n "$BIG_EMB" ]]; then
+      echo "[ccllrun] big_gguf $BIG_EMB: $BIG_GGUF" >&2
+      echo "[ccllrun] usa un modello generativo per big_gguf (l'embedding va in embed_gguf)." >&2
+      exit 1
+    fi
     MTP_FLAGS=()
     case "$(echo "$BIG_GGUF" | tr '[:lower:]' '[:upper:]')" in
       *MTP*) MTP_FLAGS=(--spec-type draft-mtp --spec-draft-n-max 2) ;;
@@ -348,6 +412,14 @@ else
 
   # ---------- SMALL ----------
   if [[ "$NO_SMALL" != "1" && -n "$SMALL_GGUF" && "$SMALL_GGUF" != "$BIG_GGUF" && "$(health "$SMALL_PORT")" != "200" ]]; then
+    if [[ -f "$SMALL_GGUF" ]]; then
+      SMALL_EMB="$(gguf_is_embedding "$SMALL_GGUF")"
+      if [[ -n "$SMALL_EMB" ]]; then
+        echo "[ccllrun] small_gguf $SMALL_EMB: $SMALL_GGUF" >&2
+        echo "[ccllrun] usa un modello generativo per small_gguf (l'embedding va in embed_gguf)." >&2
+        exit 1
+      fi
+    fi
     SMALL_BATCH="${BATCH_SMALL:-$BATCH}"
     SMALL_PARALLEL="${PARALLEL_SMALL:-$PARALLEL}"
     # NB: il small NON eredita UBATCH del big (potrebbe superare SMALL_BATCH e
@@ -360,6 +432,22 @@ else
       --cache-reuse "$SMALL_CACHE_REUSE" --port "$SMALL_PORT" --parallel "$SMALL_PARALLEL" \
       >> "$CC_DIR/llama-small.log" 2>&1 &
     echo $! > "$CC_DIR/llama-small.pid"
+  fi
+
+  # ---------- EMBED (opzionale) ----------
+  if [[ -n "$EMBED_GGUF" && "$(health "$EMBED_PORT")" != "200" ]]; then
+    if [[ ! -f "$EMBED_GGUF" ]]; then
+      echo "[ccllrun] embed_gguf non trovato: $EMBED_GGUF" >&2
+      exit 1
+    fi
+    # qui ci aspettiamo PROPRIO un embedding model: avvisa se sembra generativo
+    [[ -z "$(gguf_is_embedding "$EMBED_GGUF")" ]] && \
+      echo "[ccllrun] nota: embed_gguf non sembra un modello di embedding, /v1/embeddings potrebbe non funzionare" >&2
+    echo "[ccllrun] avvio $MODEL_EMBED su :$EMBED_PORT (embedding)..."
+    nohup "$LLAMA_BIN" --model "$EMBED_GGUF" --alias "$MODEL_EMBED" \
+      --embedding --pooling mean -ngl "$NGL" --port "$EMBED_PORT" \
+      >> "$CC_DIR/llama-embed.log" 2>&1 &
+    echo $! > "$CC_DIR/llama-embed.pid"
   fi
 fi
 
@@ -390,12 +478,17 @@ else
   [[ "$NO_SMALL" != "1" && -n "$SMALL_GGUF" && "$SMALL_GGUF" != "$BIG_GGUF" ]] && SMALL_UPSTREAM="http://127.0.0.1:$SMALL_PORT"
 fi
 
+# slot embedding: solo backend llama.cpp (mlx_lm.server non lo serve qui)
+EMBED_UPSTREAM=""
+[[ "$BACKEND" != "mlx-lm" && -n "$EMBED_GGUF" ]] && EMBED_UPSTREAM="http://127.0.0.1:$EMBED_PORT"
+
 # non avviare un secondo proxy se ce n'è già uno sulla porta (il doppione
 # morirebbe subito lasciando un pidfile marcio)
 PROXY_PID=""
 if ! curl -s -o /dev/null "http://127.0.0.1:$PORT/v1/models" 2>/dev/null; then
   CCRUN_UPSTREAM="http://127.0.0.1:$BIG_PORT" \
   CCRUN_UPSTREAM_SMALL="$SMALL_UPSTREAM" \
+  CCRUN_UPSTREAM_EMBED="$EMBED_UPSTREAM" \
   CCRUN_UPSTREAM_API="$([[ "$BACKEND" == "mlx-lm" ]] && echo openai || echo anthropic)" \
   CCRUN_SMALL_NAME="$MODEL_SMALL" \
   CCRUN_PROXY_PORT="$PORT" \
