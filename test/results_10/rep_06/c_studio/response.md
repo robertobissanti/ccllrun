@@ -1,0 +1,3 @@
+Tutti i test passano. La funzione è completa in `solution.c`.
+
+**Spiegazione:** La funzione scarta spazi iniziali/finali con `isspace()`, legge un segno opzionale (`-`/`+`), poi accumula cifre in un `uint32_t` per evitare signed overflow UB. I limiti `hi` e `lo` (INT32_MAX/10 e INT32_MAX%10 per positivo, 214748364/8 per negativo) prevengono overflow/underflow prima del calcolo. Se dopo le cifre rimane un carattere non-spazio, la stringa è rifiutata. Restituisce 1 in caso di successo, 0 altrimenti, modificando `*out` solo sul successo.

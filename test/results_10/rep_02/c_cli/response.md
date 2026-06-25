@@ -1,0 +1,3 @@
+Compilato con successo con `-std=c11 -Wall -Wextra -pedantic`.
+
+**Spiegazione:** La funzione scarta gli spazi iniziali con `isspace()`, legge un segno opzionale (`-`/`+`), poi accumula le cifre verificando overflow *prima* di moltiplicare e sommare, confrontando con `INT32_MAX`/`INT32_MIN`. Dopo le cifre, rifiuta qualsiasi carattere non-spazio residuo. Restituisce `1` solo se l'intera stringa è valida.

@@ -1,0 +1,18 @@
+Ecco la poesia:
+
+**Compilatore notturno**
+
+Il compilatore veglia nel silenzio della stanza
+la luna osserva i fili di codice che scorrono
+tra righe di memoria e sogni di silicio
+un orologio batte il ritmo di una danza
+
+Sotto il chiarore di una luna lontana
+i processori cantano canzoni di luce
+ogni istruzione è un verso di poesia
+che il mondo digitale lentamente costruisce
+
+Alba fragile bacia lo schermo spento
+resta il profumo di logica pura
+il compilatore dorme finalmente
+sognando lune e circuiti di fuoco

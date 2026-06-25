@@ -1,0 +1,3 @@
+File created. Here's the explanation:
+
+La funzione scarta spazi iniziali/finali e un segno opzionale (`+`/`-`). Scarta stringhe vuote o solo-segno. Accumula cifra per cifra verificando overflow *prima* dell'operazione: se `acc > INT32_MAX/10` oppure `acc == INT32_MAX/10` e la cifra supera l'ultima digit (con correzione per `INT32_MIN`), rifiuta. Dopo i digit, scarta spazi finali; qualsiasi carattere residuo causa rifiuto. Il segno viene applicato solo alla fine, evitando overflow intermedio su `-2147483648`.

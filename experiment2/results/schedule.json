@@ -1,0 +1,72 @@
+[
+  {
+    "rep": 1,
+    "condition_order": [
+      "persistent",
+      "resume"
+    ]
+  },
+  {
+    "rep": 2,
+    "condition_order": [
+      "persistent",
+      "resume"
+    ]
+  },
+  {
+    "rep": 3,
+    "condition_order": [
+      "persistent",
+      "resume"
+    ]
+  },
+  {
+    "rep": 4,
+    "condition_order": [
+      "persistent",
+      "resume"
+    ]
+  },
+  {
+    "rep": 5,
+    "condition_order": [
+      "persistent",
+      "resume"
+    ]
+  },
+  {
+    "rep": 6,
+    "condition_order": [
+      "persistent",
+      "resume"
+    ]
+  },
+  {
+    "rep": 7,
+    "condition_order": [
+      "persistent",
+      "resume"
+    ]
+  },
+  {
+    "rep": 8,
+    "condition_order": [
+      "resume",
+      "persistent"
+    ]
+  },
+  {
+    "rep": 9,
+    "condition_order": [
+      "resume",
+      "persistent"
+    ]
+  },
+  {
+    "rep": 10,
+    "condition_order": [
+      "resume",
+      "persistent"
+    ]
+  }
+]

@@ -1,0 +1,1 @@
+Scrivi una poesia originale in italiano intitolata esattamente "Compilatore notturno". Deve avere esattamente 3 strofe di 4 versi ciascuna, senza elenchi puntati. Ogni verso deve contenere tra 6 e 12 parole. La parola "silicio" deve apparire esattamente una volta e la parola "luna" esattamente due volte. Non aggiungere commenti, introduzioni o testo dopo la poesia.

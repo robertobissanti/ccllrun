@@ -1,0 +1,3 @@
+Tutti i test passano.
+
+**Spiegazione:** La funzione normalizza ogni coppia con `min/max`, ordina per estremo sinistro, poi scansiona unendo intervalli sovrapposti o adiacenti (`start <= prev_end + 1`). L'input non viene mai modificato grazie alla generatore di tuple. Gestisce correttamente lista vuota, duplicati, valori negativi e coppie invertite. Complessità: O(n log n) per l'ordinamento, O(n) per la scansione.

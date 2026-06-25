@@ -1,0 +1,1 @@
+TimeoutExpired(['bash', '/Volumes/Studio Storage/kDrive/documenti/dev/ai/ccllrun/ccllrun', '-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'bypassPermissions'], 180)

@@ -1,0 +1,3 @@
+Compilato con successo con `-std=c11 -Wall -Wextra -pedantic`.
+
+**Spiegazione:** La funzione scarta gli spazi iniziali, legge un segno opzionale (`+`/`-`), poi accumula le cifre verificando overflow/underflow *prima* di ogni moltiplicazione (confrontando con `hi/10` e `hi%10`). Dopo le cifre, scarta gli spazi finali e rifiuta qualsiasi carattere residuo. Restituisce `1` solo se l'intera stringa è un int32 valido.

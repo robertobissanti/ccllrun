@@ -1,0 +1,1 @@
+**Spiegazione:** La funzione normalizza ogni coppia con `min/max`, usa un `set` per rimuovere duplicati, ordina per inizio e poi unisce in un solo passaggio gli intervalli sovrapposti o adiacenti (`start <= prev_end + 1`). Restituisce una lista di tuple ordinata senza mai modificare l'input. Complessità: O(n log n) per l'ordinamento, O(n) per la fusione.

@@ -1,0 +1,91 @@
+{
+  "conditions": {
+    "persistent": {
+      "correct_turns": 26,
+      "total_turns": 30,
+      "fully_correct_replicas": 8,
+      "seconds_mean": 18.71177295379748,
+      "seconds_median": 18.064599333010847
+    },
+    "persistent_control": {
+      "correct_turns": 28,
+      "total_turns": 30,
+      "fully_correct_replicas": 9,
+      "seconds_mean": 19.20154767081258,
+      "seconds_median": 17.898650667033507
+    },
+    "resume": {
+      "correct_turns": 27,
+      "total_turns": 30,
+      "fully_correct_replicas": 8,
+      "seconds_mean": 19.903806474691372,
+      "seconds_median": 20.605039957983536
+    },
+    "resume_control": {
+      "correct_turns": 28,
+      "total_turns": 30,
+      "fully_correct_replicas": 9,
+      "seconds_mean": 18.50075697498978,
+      "seconds_median": 18.754387959008454
+    }
+  },
+  "comparisons": {
+    "persistent_vs_resume": {
+      "semantic_equal": 27,
+      "text_equal": 26,
+      "total": 30,
+      "semantic_mismatches": [
+        {
+          "rep": 8,
+          "turn": 2,
+          "semantic_equal": false,
+          "text_equal": false
+        },
+        {
+          "rep": 8,
+          "turn": 3,
+          "semantic_equal": false,
+          "text_equal": false
+        },
+        {
+          "rep": 9,
+          "turn": 3,
+          "semantic_equal": false,
+          "text_equal": false
+        }
+      ]
+    },
+    "persistent_repeatability": {
+      "semantic_equal": 28,
+      "text_equal": 25,
+      "total": 30,
+      "semantic_mismatches": [
+        {
+          "rep": 8,
+          "turn": 2,
+          "semantic_equal": false,
+          "text_equal": false
+        },
+        {
+          "rep": 8,
+          "turn": 3,
+          "semantic_equal": false,
+          "text_equal": false
+        }
+      ]
+    },
+    "resume_repeatability": {
+      "semantic_equal": 29,
+      "text_equal": 26,
+      "total": 30,
+      "semantic_mismatches": [
+        {
+          "rep": 9,
+          "turn": 3,
+          "semantic_equal": false,
+          "text_equal": false
+        }
+      ]
+    }
+  }
+}

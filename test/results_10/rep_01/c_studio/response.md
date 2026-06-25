@@ -1,0 +1,3 @@
+Compilato senza errori o warning.
+
+**Spiegazione:** La funzione scarta spazi iniziali/finali con `isspace()`, legge un segno opzionale, poi accumula cifra per cifra usando aritmetica negativa (`result = result * 10 - digit`) per gestire uniformemente INT32_MIN e INT32_MAX. Il overflow si rileva prima della moltiplicazione confrontando con `214748364` (prefisso massimo) e la cifra corrente con `7` (per positivo) o `8` (per negativo). Qualsiasi carattere non whitespace dopo i numeri causa rifiuto.

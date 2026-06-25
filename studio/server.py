@@ -77,6 +77,7 @@ DEFAULTS = {
     "big_mlx": "",
     "small_mlx": "",
     "mlx_bin": "mlx_lm.server",
+    "batch": 2048, "parallel": 1, "cache_reuse": 256,
     "studio_markdown": True,
     "studio_autostart": True,
     "studio_lan_enabled": False,
@@ -203,6 +204,7 @@ async def api_status(request):
     ]
 
     big_port, small_port, proxy_port = (int(cfg.get(k, DEFAULTS[k])) for k in ("big_port", "small_port", "proxy_port"))
+    small_props = None
     if backend == "mlx-lm":
         big_health, big_props = await asyncio.gather(
             http_json(f"http://127.0.0.1:{big_port}/v1/models"),
@@ -214,7 +216,10 @@ async def api_status(request):
             http_json(f"http://127.0.0.1:{big_port}/health"),
             http_json(f"http://127.0.0.1:{big_port}/props"),
         )
-        small_health = await http_json(f"http://127.0.0.1:{small_port}/health")
+        small_health, small_props = await asyncio.gather(
+            http_json(f"http://127.0.0.1:{small_port}/health"),
+            http_json(f"http://127.0.0.1:{small_port}/props"),
+        )
     proxy_up = await http_json(f"http://127.0.0.1:{proxy_port}/v1/models") is not None
 
     servers = {
@@ -223,7 +228,13 @@ async def api_status(request):
                 "ctx": (big_props or {}).get("default_generation_settings", {}).get("n_ctx"),
                 "model_path": (big_props or {}).get("model_path") or (big_mlx if backend == "mlx-lm" else big_gguf)},
         "small": {"up": small_health is not None, "port": small_port, "alias": cfg.get("model_small"),
-                  "pid": pid_alive("llama-small.pid")},
+                  "pid": pid_alive("llama-small.pid"),
+                  "ctx": (small_props or {}).get("default_generation_settings", {}).get("n_ctx"),
+                  "batch": (sb := cfg.get("batch_small") or cfg.get("batch", DEFAULTS.get("batch"))),
+                  "ubatch": cfg.get("ubatch_small") or sb,
+                  "parallel": cfg.get("parallel_small") or cfg.get("parallel", DEFAULTS.get("parallel")),
+                  "cache_reuse": cfg.get("cache_reuse_small") or cfg.get("cache_reuse", DEFAULTS.get("cache_reuse")),
+                  "model_path": (small_props or {}).get("model_path") or (small_mlx if backend == "mlx-lm" else small_gguf)},
         "proxy": {"up": proxy_up, "port": proxy_port, "pid": pid_alive("proxy.pid")},
     }
     return web.json_response({"doctor": doctor, "servers": servers, "config": cfg,

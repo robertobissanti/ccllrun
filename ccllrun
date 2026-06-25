@@ -32,9 +32,15 @@ PDF_MODE="hybrid"
 CTX_BIG=98304
 CTX_SMALL=32768
 BATCH=2048
+BATCH_SMALL=""          # vuoto = usa BATCH; valore minore allevia la pressione KV del small
+UBATCH=""               # micro-batch di prefill (-ub); vuoto = usa BATCH. Piu' piccolo = meno memoria di picco nel prefill
+UBATCH_SMALL=""         # vuoto = usa BATCH_SMALL del small (non eredita UBATCH del big: deve restare <= batch)
+CACHE_REUSE=256         # gap minimo per riusare la KV cache attorno a un buco (--cache-reuse)
+CACHE_REUSE_SMALL=""    # vuoto = usa CACHE_REUSE
 KV_TYPE="q8_0"          # f16 per massima qualita', q8_0 per risparmiare memoria
 NGL=99
 PARALLEL=1
+PARALLEL_SMALL=""       # vuoto = usa PARALLEL; meno slot = piu' ctx per richiesta sul small
 REASONING_BUDGET=4096
 PRESENCE_PENALTY=1.5
 MMPROJ=""               # vuoto = autodetect (mmproj-*.gguf accanto al BIG_GGUF)
@@ -97,8 +103,10 @@ apply_config() {  # apply_config <file>
     "PORT proxy_port" "BACKEND backend" "LLAMA_BIN llama_bin" "MLX_BIN mlx_bin" "BIG_PORT big_port" \
     "SMALL_PORT small_port" "BIG_GGUF big_gguf" "SMALL_GGUF small_gguf" "BIG_MLX big_mlx" "SMALL_MLX small_mlx" \
     "MODEL_BIG model_big" "MODEL_SMALL model_small" "PDF_MODE pdf_mode" \
-    "CTX_BIG ctx_big" "CTX_SMALL ctx_small" "BATCH batch" "KV_TYPE kv_type" \
-    "NGL ngl" "PARALLEL parallel" "REASONING_BUDGET reasoning_budget" \
+    "CTX_BIG ctx_big" "CTX_SMALL ctx_small" "BATCH batch" "BATCH_SMALL batch_small" \
+    "UBATCH ubatch" "UBATCH_SMALL ubatch_small" "CACHE_REUSE cache_reuse" "CACHE_REUSE_SMALL cache_reuse_small" \
+    "KV_TYPE kv_type" \
+    "NGL ngl" "PARALLEL parallel" "PARALLEL_SMALL parallel_small" "REASONING_BUDGET reasoning_budget" \
     "PRESENCE_PENALTY presence_penalty" "MMPROJ mmproj" "NO_SMALL no_small" \
     "EXTRA_BIG_FLAGS extra_big_flags" "CC_MAX_OUTPUT_TOKENS cc_max_output_tokens" \
     "CC_AUTO_COMPACT_WINDOW cc_auto_compact_window" "CC_TOOL_SEARCH cc_tool_search"
@@ -122,9 +130,15 @@ Opzioni:
   --small-mlx <dir>      cartella MLX piccola (backend mlx-lm)
   --no-small             non avviare il modello piccolo
   --ctx <n>              context del big (default $CTX_BIG)
+  --batch-small <n>      batch del small (default: stesso del big, $BATCH)
+  --ubatch <n>           micro-batch di prefill -ub del big (default: = batch)
+  --ubatch-small <n>     micro-batch di prefill del small (default: = batch del small; deve essere <= batch)
+  --cache-reuse <n>      gap minimo riuso KV cache, big (default $CACHE_REUSE)
+  --cache-reuse-small <n> idem per il small (default: stesso del big)
   --kv <tipo>            f16|q8_0|q4_0 per la KV cache (default $KV_TYPE)
   --mmproj <path|off>    projector visione (default: autodetect)
-  --parallel <n>         slot paralleli llama-server (default $PARALLEL)
+  --parallel <n>         slot paralleli llama-server big (default $PARALLEL)
+  --parallel-small <n>   slot paralleli del small (default: stesso del big, $PARALLEL)
   --pdf-mode <m>         text|image|hybrid (default $PDF_MODE)
   --port <n>             porta proxy (default $PORT)
   --tool-search          attiva la tool search di Claude Code (prefill piu' veloce
@@ -135,7 +149,7 @@ Opzioni:
   --help-ccllrun         questo aiuto
 
 Config JSON ($CONFIG_FILE), chiavi: backend, big_gguf, small_gguf, big_mlx, small_mlx, ctx_big, ctx_small,
-batch, kv_type, ngl, parallel, reasoning_budget, presence_penalty, mmproj,
+batch, batch_small, ubatch, ubatch_small, cache_reuse, cache_reuse_small, kv_type, ngl, parallel, parallel_small, reasoning_budget, presence_penalty, mmproj,
 pdf_mode, proxy_port, big_port, small_port, model_big, model_small,
 no_small, extra_big_flags, llama_bin, mlx_bin, cc_auto_compact_window,
 cc_max_output_tokens, cc_tool_search.
@@ -155,9 +169,15 @@ while [[ $# -gt 0 ]]; do
     --small-mlx)     CLI_OVERRIDES+=("SMALL_MLX=$2"); shift 2 ;;
     --no-small)      CLI_OVERRIDES+=("NO_SMALL=1"); shift ;;
     --ctx)           CLI_OVERRIDES+=("CTX_BIG=$2"); shift 2 ;;
+    --batch-small)   CLI_OVERRIDES+=("BATCH_SMALL=$2"); shift 2 ;;
+    --ubatch)        CLI_OVERRIDES+=("UBATCH=$2"); shift 2 ;;
+    --ubatch-small)  CLI_OVERRIDES+=("UBATCH_SMALL=$2"); shift 2 ;;
+    --cache-reuse)   CLI_OVERRIDES+=("CACHE_REUSE=$2"); shift 2 ;;
+    --cache-reuse-small) CLI_OVERRIDES+=("CACHE_REUSE_SMALL=$2"); shift 2 ;;
     --kv)            CLI_OVERRIDES+=("KV_TYPE=$2"); shift 2 ;;
     --mmproj)        CLI_OVERRIDES+=("MMPROJ=$2"); shift 2 ;;
     --parallel)      CLI_OVERRIDES+=("PARALLEL=$2"); shift 2 ;;
+    --parallel-small) CLI_OVERRIDES+=("PARALLEL_SMALL=$2"); shift 2 ;;
     --pdf-mode)      CLI_OVERRIDES+=("PDF_MODE=$2"); shift 2 ;;
     --port)          CLI_OVERRIDES+=("PORT=$2"); shift 2 ;;
     --tool-search)   CLI_OVERRIDES+=("CC_TOOL_SEARCH=1"); shift ;;
@@ -309,9 +329,9 @@ else
     nohup "$LLAMA_BIN" --model "$BIG_GGUF" --alias "$MODEL_BIG" \
       --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0 \
       "${MTP_FLAGS[@]}" ${MMPROJ_FLAGS[@]+"${MMPROJ_FLAGS[@]}"} \
-      --ctx-size "$CTX_BIG" -b "$BATCH" -ub "$BATCH" -fa on -ngl "$NGL" \
+      --ctx-size "$CTX_BIG" -b "$BATCH" -ub "${UBATCH:-$BATCH}" -fa on -ngl "$NGL" \
       --cache-type-k "$KV_TYPE" --cache-type-v "$KV_TYPE" \
-      --cache-reuse 256 --port "$BIG_PORT" --parallel "$PARALLEL" \
+      --cache-reuse "$CACHE_REUSE" --port "$BIG_PORT" --parallel "$PARALLEL" \
       --reasoning-budget "$REASONING_BUDGET" --presence-penalty "$PRESENCE_PENALTY" \
       $EXTRA_BIG_FLAGS \
       >> "$CC_DIR/llama-big.log" 2>&1 &
@@ -328,10 +348,16 @@ else
 
   # ---------- SMALL ----------
   if [[ "$NO_SMALL" != "1" && -n "$SMALL_GGUF" && "$SMALL_GGUF" != "$BIG_GGUF" && "$(health "$SMALL_PORT")" != "200" ]]; then
-    echo "[ccllrun] avvio $MODEL_SMALL su :$SMALL_PORT..."
+    SMALL_BATCH="${BATCH_SMALL:-$BATCH}"
+    SMALL_PARALLEL="${PARALLEL_SMALL:-$PARALLEL}"
+    # NB: il small NON eredita UBATCH del big (potrebbe superare SMALL_BATCH e
+    # llama.cpp richiede -ub <= -b). Senza UBATCH_SMALL si usa SMALL_BATCH.
+    SMALL_UBATCH="${UBATCH_SMALL:-$SMALL_BATCH}"
+    SMALL_CACHE_REUSE="${CACHE_REUSE_SMALL:-$CACHE_REUSE}"
+    echo "[ccllrun] avvio $MODEL_SMALL su :$SMALL_PORT (ctx=$CTX_SMALL batch=$SMALL_BATCH ubatch=$SMALL_UBATCH parallel=$SMALL_PARALLEL)..."
     nohup "$LLAMA_BIN" --model "$SMALL_GGUF" --alias "$MODEL_SMALL" \
-      --ctx-size "$CTX_SMALL" -b "$BATCH" -ub "$BATCH" -fa on -ngl "$NGL" \
-      --cache-reuse 256 --port "$SMALL_PORT" \
+      --ctx-size "$CTX_SMALL" -b "$SMALL_BATCH" -ub "$SMALL_UBATCH" -fa on -ngl "$NGL" \
+      --cache-reuse "$SMALL_CACHE_REUSE" --port "$SMALL_PORT" --parallel "$SMALL_PARALLEL" \
       >> "$CC_DIR/llama-small.log" 2>&1 &
     echo $! > "$CC_DIR/llama-small.pid"
   fi

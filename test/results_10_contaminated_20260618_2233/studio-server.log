@@ -1,0 +1,26 @@
+[studio] http://127.0.0.1:8871
+[studio] http://127.0.0.1:8871
+Traceback (most recent call last):
+  File "/Volumes/Studio Storage/kDrive/documenti/dev/ai/ccllrun/studio/server.py", line 1407, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/Volumes/Studio Storage/kDrive/documenti/dev/ai/ccllrun/studio/server.py", line 1403, in main
+    web.run_app(app, host=STUDIO_HOST, port=STUDIO_PORT, print=None)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/robertobissanti/.ccllrun/venv/lib/python3.14/site-packages/aiohttp/web.py", line 502, in run_app
+    loop.run_until_complete(main_task)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/Users/robertobissanti/.ccllrun/venv/lib/python3.14/site-packages/aiohttp/web.py", line 404, in _run_app
+    await site.start()
+  File "/Users/robertobissanti/.ccllrun/venv/lib/python3.14/site-packages/aiohttp/web_runner.py", line 138, in start
+    self._server = await loop.create_server(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/base_events.py", line 1638, in create_server
+    raise OSError(err.errno, msg) from None
+OSError: [Errno 48] error while attempting to bind on address ('127.0.0.1', 8871): [errno 48] address already in use

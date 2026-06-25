@@ -1,0 +1,3 @@
+All 18 tests pass.
+
+**Spiegazione:** La funzione scarta spazi iniziali/finali con `isspace`, legge un segno opzionale (`+`/`-`), poi accumula cifre in `uint32_t` per evitare undefined behavior da overflow signed. Prima di ogni moltiplicazione+aggiunta, confronta con `214748364`/`7` (per `INT32_MAX`) o `214748364`/`8` (per `INT32_MIN`), gestendo l'asimmetria two's complement. Se restano caratteri non-spazio dopo il numero, rifiuta. Restituisce 1 solo se tutto è valido.
